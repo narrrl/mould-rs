@@ -19,6 +19,7 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
+          cache: false
 
       - name: Get Version
         id: get_version
@@ -31,10 +32,31 @@ jobs:
             echo "TAG=v$VERSION" >> $GITHUB_OUTPUT
           fi
 
+      - name: Check if Release Exists
+        id: check_release
+        shell: bash
+        run: |
+          # Use curl to check if a release for the current TAG already exists on Gitea
+          # This prevents the workflow from failing if a push to main doesn't update the version
+          # Assuming standard Gitea API (e.g., https://gitea.example.com/api/v1/repos/{owner}/{repo}/releases/tags/{tag})
+          # github.repository is usually 'owner/repo'
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "${{ github.server_url }}/api/v1/repos/${{ github.repository }}/releases/tags/${{ steps.get_version.outputs.TAG }}")
+          
+          if [ "$HTTP_STATUS" = "200" ]; then
+            echo "EXISTS=true" >> $GITHUB_OUTPUT
+            echo "Release already exists for tag ${{ steps.get_version.outputs.TAG }}. Skipping creation."
+          else
+            echo "EXISTS=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Build
+        if: steps.check_release.outputs.EXISTS == 'false'
         run: cargo build --release
 
       - name: Create Release
+        if: steps.check_release.outputs.EXISTS == 'false'
         id: create_release
         uses: https://github.com/actions/create-release@v1
         env:
@@ -50,6 +72,7 @@ jobs:
           prerelease: false
 
       - name: Upload Release Asset
+        if: steps.check_release.outputs.EXISTS == 'false'
         uses: https://github.com/actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
