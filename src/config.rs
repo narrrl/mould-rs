@@ -1,15 +1,59 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
+use ratatui::style::Color;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ThemeConfig {
-    pub name: String,
+    #[serde(default)]
+    pub transparent: bool,
+    pub crust: String,
+    pub surface0: String,
+    pub surface1: String,
+    pub text: String,
+    pub blue: String,
+    pub green: String,
+    pub lavender: String,
+    pub mauve: String,
+    pub peach: String,
+}
+
+impl ThemeConfig {
+    fn parse_hex(hex: &str) -> Color {
+        let hex = hex.trim_start_matches('#');
+        if hex.len() == 6 {
+            let r = u8::from_str_radix(&hex[0..2], 16).unwrap_or(0);
+            let g = u8::from_str_radix(&hex[2..4], 16).unwrap_or(0);
+            let b = u8::from_str_radix(&hex[4..6], 16).unwrap_or(0);
+            Color::Rgb(r, g, b)
+        } else {
+            Color::Reset
+        }
+    }
+
+    pub fn crust(&self) -> Color { Self::parse_hex(&self.crust) }
+    pub fn surface0(&self) -> Color { Self::parse_hex(&self.surface0) }
+    pub fn surface1(&self) -> Color { Self::parse_hex(&self.surface1) }
+    pub fn text(&self) -> Color { Self::parse_hex(&self.text) }
+    pub fn blue(&self) -> Color { Self::parse_hex(&self.blue) }
+    pub fn green(&self) -> Color { Self::parse_hex(&self.green) }
+    pub fn lavender(&self) -> Color { Self::parse_hex(&self.lavender) }
+    pub fn mauve(&self) -> Color { Self::parse_hex(&self.mauve) }
+    pub fn peach(&self) -> Color { Self::parse_hex(&self.peach) }
 }
 
 impl Default for ThemeConfig {
     fn default() -> Self {
         Self {
-            name: "catppuccin_mocha".to_string(),
+            transparent: false,
+            crust: "#11111b".to_string(),
+            surface0: "#313244".to_string(),
+            surface1: "#45475a".to_string(),
+            text: "#cdd6f4".to_string(),
+            blue: "#89b4fa".to_string(),
+            green: "#a6e3a1".to_string(),
+            lavender: "#b4befe".to_string(),
+            mauve: "#cba6f7".to_string(),
+            peach: "#fab387".to_string(),
         }
     }
 }

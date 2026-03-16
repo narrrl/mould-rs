@@ -2,28 +2,20 @@ use crate::app::{App, Mode};
 use crate::config::Config;
 use ratatui::{
     layout::{Constraint, Direction, Layout},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph},
     Frame,
 };
 
-// Catppuccin Mocha Palette
-const CRUST: Color = Color::Rgb(17, 17, 27);
-const SURFACE0: Color = Color::Rgb(49, 50, 68);
-const SURFACE1: Color = Color::Rgb(69, 71, 90);
-const TEXT: Color = Color::Rgb(205, 214, 244);
-const BLUE: Color = Color::Rgb(137, 180, 250);
-const GREEN: Color = Color::Rgb(166, 227, 161);
-const LAVENDER: Color = Color::Rgb(180, 190, 254);
-const MAUVE: Color = Color::Rgb(203, 166, 247);
-const PEACH: Color = Color::Rgb(250, 179, 135);
-
-pub fn draw(f: &mut Frame, app: &mut App, _config: &Config) {
+pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
+    let theme = &config.theme;
     let size = f.area();
 
     // Background
-    f.render_widget(Block::default().style(Style::default().bg(CRUST)), size);
+    if !theme.transparent {
+        f.render_widget(Block::default().style(Style::default().bg(theme.crust())), size);
+    }
 
     // Main layout with horizontal padding
     let outer_layout = Layout::default()
@@ -52,7 +44,7 @@ pub fn draw(f: &mut Frame, app: &mut App, _config: &Config) {
         .map(|v| v.key.len())
         .max()
         .unwrap_or(20)
-        .min(40); // Cap at 40 to prevent long keys from hiding values
+        .min(40);
 
     // List
     let items: Vec<ListItem> = app
@@ -69,27 +61,27 @@ pub fn draw(f: &mut Frame, app: &mut App, _config: &Config) {
             };
 
             let key_style = if is_selected {
-                Style::default().fg(CRUST).add_modifier(Modifier::BOLD)
+                Style::default().fg(theme.crust()).add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(LAVENDER)
+                Style::default().fg(theme.lavender())
             };
 
             let value_style = if is_selected {
-                Style::default().fg(CRUST)
+                Style::default().fg(theme.crust())
             } else {
-                Style::default().fg(TEXT)
+                Style::default().fg(theme.text())
             };
 
             let line = Line::from(vec![
                 Span::styled(format!(" {:<width$} ", var.key, width = max_key_len), key_style),
-                Span::styled("│ ", Style::default().fg(SURFACE1)),
+                Span::styled("│ ", Style::default().fg(theme.surface1())),
                 Span::styled(format!(" {} ", val), value_style),
             ]);
 
             let item_style = if is_selected {
-                Style::default().bg(BLUE)
+                Style::default().bg(theme.blue())
             } else {
-                Style::default().fg(TEXT)
+                Style::default().fg(theme.text())
             };
 
             ListItem::new(line).style(item_style)
@@ -102,8 +94,8 @@ pub fn draw(f: &mut Frame, app: &mut App, _config: &Config) {
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
                 .title(" Config Variables ")
-                .title_style(Style::default().fg(MAUVE).add_modifier(Modifier::BOLD))
-                .border_style(Style::default().fg(SURFACE1)),
+                .title_style(Style::default().fg(theme.mauve()).add_modifier(Modifier::BOLD))
+                .border_style(Style::default().fg(theme.surface1())),
         );
 
     let mut state = ListState::default();
@@ -123,21 +115,21 @@ pub fn draw(f: &mut Frame, app: &mut App, _config: &Config) {
     };
 
     let input_border_color = match app.mode {
-        Mode::Insert => GREEN,
-        Mode::Normal => SURFACE1,
+        Mode::Insert => theme.green(),
+        Mode::Normal => theme.surface1(),
     };
 
     let input_text = app.input.value();
     let cursor_pos = app.input.visual_cursor();
 
     let input = Paragraph::new(input_text)
-        .style(Style::default().fg(TEXT))
+        .style(Style::default().fg(theme.text()))
         .block(
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
                 .title(input_title)
-                .title_style(Style::default().fg(PEACH).add_modifier(Modifier::BOLD))
+                .title_style(Style::default().fg(theme.peach()).add_modifier(Modifier::BOLD))
                 .border_style(Style::default().fg(input_border_color)),
         );
     f.render_widget(input, chunks[2]);
@@ -149,20 +141,20 @@ pub fn draw(f: &mut Frame, app: &mut App, _config: &Config) {
         ));
     }
 
-    // Status bar (modern pill style at the bottom)
+    // Status bar
     let (mode_str, mode_style) = match app.mode {
         Mode::Normal => (
             " NORMAL ",
             Style::default()
-                .bg(BLUE)
-                .fg(CRUST)
+                .bg(theme.blue())
+                .fg(theme.crust())
                 .add_modifier(Modifier::BOLD),
         ),
         Mode::Insert => (
             " INSERT ",
             Style::default()
-                .bg(GREEN)
-                .fg(CRUST)
+                .bg(theme.green())
+                .fg(theme.crust())
                 .add_modifier(Modifier::BOLD),
         ),
     };
@@ -176,9 +168,9 @@ pub fn draw(f: &mut Frame, app: &mut App, _config: &Config) {
 
     let status_line = Line::from(vec![
         Span::styled(mode_str, mode_style),
-        Span::styled(format!(" {} ", status_msg), Style::default().bg(SURFACE0).fg(TEXT)),
+        Span::styled(format!(" {} ", status_msg), Style::default().bg(theme.surface0()).fg(theme.text())),
     ]);
 
-    let status = Paragraph::new(status_line).style(Style::default().bg(SURFACE0));
+    let status = Paragraph::new(status_line).style(Style::default().bg(theme.surface0()));
     f.render_widget(status, chunks[4]);
 }
