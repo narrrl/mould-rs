@@ -152,22 +152,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cenv-rs"
-version = "0.2.0"
-dependencies = [
- "clap",
- "crossterm",
- "dirs",
- "ratatui",
- "serde",
- "serde_json",
- "serde_yaml",
- "tempfile",
- "toml",
- "tui-input",
-]
-
-[[package]]
 name = "cfg-if"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -794,6 +778,22 @@ dependencies = [
  "log",
  "wasi",
  "windows-sys",
+]
+
+[[package]]
+name = "mould"
+version = "0.2.0"
+dependencies = [
+ "clap",
+ "crossterm",
+ "dirs",
+ "ratatui",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "toml",
+ "tui-input",
 ]
 
 [[package]]

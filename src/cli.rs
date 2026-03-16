@@ -2,7 +2,7 @@ use clap::Parser;
 use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
-#[command(author, version, about = "TUI tool to generate and edit configuration files (.env, json, yaml, toml)")]
+#[command(author, version, about = "mould: A TUI tool to generate and edit configuration files (.env, json, yaml, toml)")]
 pub struct Cli {
     /// The input template file (e.g., .env.example, config.json.template, docker-compose.yml)
     pub input: PathBuf,

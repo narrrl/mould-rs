@@ -47,7 +47,7 @@ pub struct Config {
 
 pub fn load_config() -> Config {
     if let Some(mut config_dir) = dirs::config_dir() {
-        config_dir.push("cenv-rs");
+        config_dir.push("mould");
         config_dir.push("config.toml");
 
         if config_dir.exists() {

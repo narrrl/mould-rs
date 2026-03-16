@@ -36,10 +36,6 @@ jobs:
         id: check_release
         shell: bash
         run: |
-          # Use curl to check if a release for the current TAG already exists on Gitea
-          # This prevents the workflow from failing if a push to main doesn't update the version
-          # Assuming standard Gitea API (e.g., https://gitea.example.com/api/v1/repos/{owner}/{repo}/releases/tags/{tag})
-          # github.repository is usually 'owner/repo'
           HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             "${{ github.server_url }}/api/v1/repos/${{ github.repository }}/releases/tags/${{ steps.get_version.outputs.TAG }}")
@@ -55,7 +51,7 @@ jobs:
         if: steps.check_release.outputs.EXISTS == 'false'
         run: |
           cargo build --release
-          mv target/release/cenv target/release/cenv-${{ steps.get_version.outputs.TAG }}-linux-amd64
+          mv target/release/mould target/release/mould-${{ steps.get_version.outputs.TAG }}-linux-amd64
 
       - name: Create Release and Upload Asset
         if: steps.check_release.outputs.EXISTS == 'false'
@@ -67,7 +63,7 @@ jobs:
             Automated release for version ${{ steps.get_version.outputs.VERSION }}
             Commit: ${{ github.sha }}
             Branch: ${{ github.ref_name }}
-          files: target/release/cenv-${{ steps.get_version.outputs.TAG }}-linux-amd64
+          files: target/release/mould-${{ steps.get_version.outputs.TAG }}-linux-amd64
           draft: false
           prerelease: false
         env:
