@@ -2,22 +2,34 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use ratatui::style::Color;
 
+/// Configuration for the application's appearance.
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ThemeConfig {
+    /// If true, skip rendering the background block to let the terminal's transparency show.
     #[serde(default)]
     pub transparent: bool,
+    /// Color for standard background areas (when not transparent).
     pub crust: String,
+    /// Dark surface color for UI elements like the status bar.
     pub surface0: String,
+    /// Light surface color for borders and dividers.
     pub surface1: String,
+    /// Default text color.
     pub text: String,
+    /// Color for selection highlighting and normal mode tag.
     pub blue: String,
+    /// Color for insert mode highlighting and success status.
     pub green: String,
+    /// Accent color for configuration keys.
     pub lavender: String,
+    /// Accent color for primary section titles.
     pub mauve: String,
+    /// Accent color for input field titles.
     pub peach: String,
 }
 
 impl ThemeConfig {
+    /// Internal helper to parse a hex color string ("#RRGGBB") into a TUI Color.
     fn parse_hex(hex: &str) -> Color {
         let hex = hex.trim_start_matches('#');
         if hex.len() == 6 {
@@ -42,6 +54,7 @@ impl ThemeConfig {
 }
 
 impl Default for ThemeConfig {
+    /// Default theme: Catppuccin Mocha.
     fn default() -> Self {
         Self {
             transparent: false,
@@ -58,6 +71,7 @@ impl Default for ThemeConfig {
     }
 }
 
+/// Custom keybindings for navigation and application control.
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct KeybindsConfig {
     pub down: String,
@@ -81,6 +95,7 @@ impl Default for KeybindsConfig {
     }
 }
 
+/// Root configuration structure for mould.
 #[derive(Debug, Deserialize, Serialize, Default, Clone)]
 pub struct Config {
     #[serde(default)]
@@ -89,6 +104,8 @@ pub struct Config {
     pub keybinds: KeybindsConfig,
 }
 
+/// Loads the configuration from the user's home config directory (~/.config/mould/config.toml).
+/// Falls back to default settings if no configuration is found.
 pub fn load_config() -> Config {
     if let Some(mut config_dir) = dirs::config_dir() {
         config_dir.push("mould");

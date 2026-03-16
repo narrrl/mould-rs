@@ -8,12 +8,19 @@ use std::io;
 use std::path::Path;
 use tui_input::backend::crossterm::EventHandler;
 
+/// Manages the main application execution loop, event handling, and terminal interaction.
 pub struct AppRunner<'a, B: Backend> {
+    /// Reference to the terminal instance.
     terminal: &'a mut Terminal<B>,
+    /// Mutable reference to the application state.
     app: &'a mut App,
+    /// Loaded user configuration.
     config: &'a Config,
+    /// Path where the final configuration will be saved.
     output_path: &'a Path,
+    /// Handler for the specific file format (env, json, yaml, toml).
     handler: &'a dyn FormatHandler,
+    /// Buffer for storing active command entry (e.g., ":w").
     command_buffer: String,
 }
 
@@ -21,6 +28,7 @@ impl<'a, B: Backend> AppRunner<'a, B>
 where
     io::Error: From<B::Error>,
 {
+    /// Creates a new runner instance.
     pub fn new(
         terminal: &'a mut Terminal<B>,
         app: &'a mut App,
@@ -38,9 +46,11 @@ where
         }
     }
 
+    /// Starts the main application loop.
     pub fn run(&mut self) -> io::Result<()> {
         while self.app.running {
-            self.terminal.draw(|f| crate::ui::draw(f, self.app, self.config))?;
+            self.terminal
+                .draw(|f| crate::ui::draw(f, self.app, self.config))?;
 
             if let Event::Key(key) = event::read()? {
                 self.handle_key_event(key)?;
@@ -49,6 +59,7 @@ where
         Ok(())
     }
 
+    /// Primary dispatcher for all keyboard events.
     fn handle_key_event(&mut self, key: KeyEvent) -> io::Result<()> {
         match self.app.mode {
             Mode::Normal => self.handle_normal_mode(key),
@@ -56,6 +67,7 @@ where
         }
     }
 
+    /// Handles keys in Normal mode, separating navigation from command entry.
     fn handle_normal_mode(&mut self, key: KeyEvent) -> io::Result<()> {
         if !self.command_buffer.is_empty() {
             self.handle_command_mode(key)
@@ -64,6 +76,7 @@ where
         }
     }
 
+    /// Logic for entering and executing ":" style commands.
     fn handle_command_mode(&mut self, key: KeyEvent) -> io::Result<()> {
         match key.code {
             KeyCode::Enter => {
@@ -90,6 +103,7 @@ where
         }
     }
 
+    /// Handles primary navigation (j/k) and transitions to insert or command modes.
     fn handle_navigation_mode(&mut self, key: KeyEvent) -> io::Result<()> {
         if let KeyCode::Char(c) = key.code {
             let c_str = c.to_string();
@@ -116,6 +130,7 @@ where
         Ok(())
     }
 
+    /// Delegates key events to the `tui_input` handler during active editing.
     fn handle_insert_mode(&mut self, key: KeyEvent) -> io::Result<()> {
         match key.code {
             KeyCode::Esc | KeyCode::Enter => {
@@ -128,6 +143,7 @@ where
         Ok(())
     }
 
+    /// Logic to map command strings (like ":w") to internal application actions.
     fn execute_command(&mut self, cmd: &str) -> io::Result<()> {
         if cmd == self.config.keybinds.save {
             self.save_file()
@@ -144,6 +160,7 @@ where
         }
     }
 
+    /// Attempts to write the current app state to the specified output file.
     fn save_file(&mut self) -> io::Result<()> {
         if self.handler.write(self.output_path, &self.app.vars).is_ok() {
             self.app.status_message = Some(format!("Saved to {}", self.output_path.display()));
@@ -153,6 +170,7 @@ where
         Ok(())
     }
 
+    /// Synchronizes the status bar display with the active command buffer.
     fn sync_command_status(&mut self) {
         if self.command_buffer.is_empty() {
             self.app.status_message = None;

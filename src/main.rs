@@ -1,15 +1,17 @@
 mod app;
 mod cli;
 mod config;
+mod error;
 mod format;
 mod runner;
 mod ui;
 
 use app::App;
 use config::load_config;
+use error::MouldError;
 use format::{detect_format, get_handler};
+use log::{error, info, warn};
 use runner::AppRunner;
-use std::error::Error;
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -20,37 +22,55 @@ use crossterm::{
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 
+/// Helper to automatically determine the output file path based on common naming conventions.
 fn determine_output_path(input: &Path) -> PathBuf {
     let file_name = input.file_name().unwrap_or_default().to_string_lossy();
+    
     if file_name == ".env.example" {
         return input.with_file_name(".env");
     }
+    
     if file_name == "docker-compose.yml" {
         return input.with_file_name("docker-compose.override.yml");
     }
     if file_name == "docker-compose.yaml" {
         return input.with_file_name("docker-compose.override.yaml");
     }
+    
     if file_name.ends_with(".example.json") {
         return input.with_file_name(file_name.replace(".example.json", ".json"));
     }
     if file_name.ends_with(".template.json") {
         return input.with_file_name(file_name.replace(".template.json", ".json"));
     }
+    
     input.with_extension(format!(
         "{}.out",
         input.extension().unwrap_or_default().to_string_lossy()
     ))
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> anyhow::Result<()> {
     let args = cli::parse();
+
+    // Initialize logger with verbosity from CLI
+    let log_level = match args.verbose {
+        0 => log::LevelFilter::Warn,
+        1 => log::LevelFilter::Info,
+        _ => log::LevelFilter::Debug,
+    };
+    env_logger::Builder::new()
+        .filter_level(log_level)
+        .format_timestamp(None)
+        .init();
 
     let input_path = args.input;
     if !input_path.exists() {
-        println!("Input file does not exist: {}", input_path.display());
-        return Ok(());
+        error!("Input file not found: {}", input_path.display());
+        return Err(MouldError::FileNotFound(input_path.display().to_string()).into());
     }
+
+    info!("Input: {}", input_path.display());
 
     let format_type = detect_format(&input_path, args.format);
     let handler = get_handler(format_type);
@@ -59,46 +79,53 @@ fn main() -> Result<(), Box<dyn Error>> {
         .output
         .unwrap_or_else(|| determine_output_path(&input_path));
 
-    let mut vars = handler.parse(&input_path).unwrap_or_else(|err| {
-        println!("Error parsing input file: {}", err);
-        vec![]
-    });
+    info!("Output: {}", output_path.display());
+
+    let mut vars = handler.parse(&input_path).map_err(|e| {
+        error!("Failed to parse input file: {}", e);
+        MouldError::Format(format!("Failed to parse {}: {}", input_path.display(), e))
+    })?;
 
     if vars.is_empty() {
-        println!(
-            "No variables found in {} or file could not be parsed.",
-            input_path.display()
-        );
-        return Ok(());
+        warn!("No variables found in {}", input_path.display());
     }
 
     if let Err(e) = handler.merge(&output_path, &mut vars) {
-        println!("Warning: Could not merge existing output file: {}", e);
+        warn!("Could not merge existing output file: {}", e);
     }
 
     let config = load_config();
     let mut app = App::new(vars);
 
-    enable_raw_mode()?;
+    // Terminal lifecycle
+    enable_raw_mode().map_err(|e| MouldError::Terminal(format!("Failed to enable raw mode: {}", e)))?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)
+        .map_err(|e| MouldError::Terminal(format!("Failed to enter alternate screen: {}", e)))?;
     let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
+    let mut terminal = Terminal::new(backend)
+        .map_err(|e| MouldError::Terminal(format!("Failed to create terminal backend: {}", e)))?;
 
     let mut runner = AppRunner::new(&mut terminal, &mut app, &config, &output_path, handler.as_ref());
     let res = runner.run();
 
-    disable_raw_mode()?;
+    // Restoration
+    disable_raw_mode().ok();
     execute!(
         terminal.backend_mut(),
         LeaveAlternateScreen,
         DisableMouseCapture
-    )?;
-    terminal.show_cursor()?;
+    ).ok();
+    terminal.show_cursor().ok();
 
-    if let Err(err) = res {
-        println!("{:?}", err);
+    match res {
+        Ok(_) => {
+            info!("Successfully finished mould session.");
+            Ok(())
+        },
+        Err(e) => {
+            error!("Application error during run: {}", e);
+            Err(e.into())
+        }
     }
-
-    Ok(())
 }
