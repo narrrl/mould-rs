@@ -1,19 +1,23 @@
 [package]
-name = "cenv-rs"
-version = "0.1.0"
+name = "mould"
+version = "0.2.0"
 edition = "2024"
 authors = ["Nils Pukropp <nils@narl.io>"]
 
 [[bin]]
-name = "cenv"
+name = "mould"
 path = "src/main.rs"
 
 [dependencies]
+clap = { version = "4.6.0", features = ["derive"] }
 crossterm = "0.29.0"
 dirs = "6.0.0"
 ratatui = "0.30.0"
 serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+serde_yaml = "0.9.34"
 toml = "1.0.6"
+tui-input = "0.15.0"
 
 [dev-dependencies]
 tempfile = "3.27.0"
