@@ -1,11 +1,11 @@
 use crate::app::{App, Mode};
 use crate::config::Config;
 use ratatui::{
-    Frame,
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
+    Frame,
 };
 
 // Catppuccin Mocha Palette
@@ -19,7 +19,7 @@ const SURFACE1: Color = Color::Rgb(69, 71, 90);
 pub fn draw(f: &mut Frame, app: &mut App, _config: &Config) {
     let size = f.area();
 
-    // Theming (defaults to Mocha, can be extended later via _config)
+    // Theming
     let bg_color = BASE;
     let fg_color = TEXT;
     let highlight_color = BLUE;
@@ -53,7 +53,13 @@ pub fn draw(f: &mut Frame, app: &mut App, _config: &Config) {
                 Style::default().fg(fg_color)
             };
 
-            let content = format!(" {} = {} ", var.key, var.value);
+            let val = if i == app.selected && matches!(app.mode, Mode::Insert) {
+                app.input.value()
+            } else {
+                &var.value
+            };
+
+            let content = format!(" {} = {} ", var.key, val);
             ListItem::new(Line::from(content)).style(style)
         })
         .collect();
@@ -93,11 +99,8 @@ pub fn draw(f: &mut Frame, app: &mut App, _config: &Config) {
         Mode::Normal => SURFACE1,
     };
 
-    let input_text = if let Some(var) = current_var {
-        var.value.as_str()
-    } else {
-        ""
-    };
+    let input_text = app.input.value();
+    let cursor_pos = app.input.visual_cursor();
 
     let input = Paragraph::new(input_text)
         .style(Style::default().fg(fg_color))
@@ -110,35 +113,37 @@ pub fn draw(f: &mut Frame, app: &mut App, _config: &Config) {
     f.render_widget(input, chunks[1]);
 
     if let Mode::Insert = app.mode {
-        let input_area = chunks[1];
-        // Cursor positioning
         f.set_cursor_position(ratatui::layout::Position::new(
-            input_area.x + 1 + input_text.chars().count() as u16,
-            input_area.y + 1,
+            chunks[1].x + 1 + cursor_pos as u16,
+            chunks[1].y + 1,
         ));
     }
 
     // Status bar
     let status_style = Style::default().bg(MANTLE).fg(fg_color);
-    let mode_str = match app.mode {
-        Mode::Normal => " NORMAL ",
-        Mode::Insert => " INSERT ",
-    };
-    let mode_style = match app.mode {
-        Mode::Normal => Style::default()
-            .bg(BLUE)
-            .fg(bg_color)
-            .add_modifier(Modifier::BOLD),
-        Mode::Insert => Style::default()
-            .bg(GREEN)
-            .fg(bg_color)
-            .add_modifier(Modifier::BOLD),
+    let (mode_str, mode_style) = match app.mode {
+        Mode::Normal => (
+            " NORMAL ",
+            Style::default()
+                .bg(BLUE)
+                .fg(bg_color)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Mode::Insert => (
+            " INSERT ",
+            Style::default()
+                .bg(GREEN)
+                .fg(bg_color)
+                .add_modifier(Modifier::BOLD),
+        ),
     };
 
-    let status_msg = app
-        .status_message
-        .as_deref()
-        .unwrap_or(" j/k: navigate | i: edit | :w/Enter: save | q/:q: quit ");
+    let status_msg = app.status_message.as_deref().unwrap_or_else(|| {
+        match app.mode {
+            Mode::Normal => " navigation | i: edit | :w: save | :q: quit ",
+            Mode::Insert => " Esc: back to normal | Enter: commit ",
+        }
+    });
 
     let status_line = Line::from(vec![
         Span::styled(mode_str, mode_style),

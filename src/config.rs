@@ -14,10 +14,35 @@ impl Default for ThemeConfig {
     }
 }
 
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct KeybindsConfig {
+    pub down: String,
+    pub up: String,
+    pub edit: String,
+    pub save: String,
+    pub quit: String,
+    pub normal_mode: String,
+}
+
+impl Default for KeybindsConfig {
+    fn default() -> Self {
+        Self {
+            down: "j".to_string(),
+            up: "k".to_string(),
+            edit: "i".to_string(),
+            save: ":w".to_string(),
+            quit: ":q".to_string(),
+            normal_mode: "Esc".to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize, Default, Clone)]
 pub struct Config {
     #[serde(default)]
     pub theme: ThemeConfig,
+    #[serde(default)]
+    pub keybinds: KeybindsConfig,
 }
 
 pub fn load_config() -> Config {
