@@ -121,14 +121,6 @@ impl FormatHandler for HierarchicalHandler {
     }
 
     fn write(&self, path: &Path, vars: &[EnvVar]) -> io::Result<()> {
-        // For writing hierarchical formats, we ideally want to preserve the original structure.
-        // But we don't have it here. We should parse the template again to get the structure!
-        // Oh wait, `write` is called with only `vars`.
-        // If we want to construct the tree from scratch, it's very difficult to guess array vs object
-        // and data types without the original template.
-        // Let's change the trait or just keep a copy of the template?
-        // Actually, if we require the user to have the template, we can just parse the template, update the leaves, and write.
-        // We'll write a reconstruction algorithm that just creates objects based on keys.
         let mut root = Value::Object(Map::new());
         for var in vars {
             insert_into_value(&mut root, &var.key, &var.value);
