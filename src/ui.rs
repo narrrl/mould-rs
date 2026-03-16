@@ -8,36 +8,42 @@ use ratatui::{
     Frame,
 };
 
+/// Renders the main application interface using ratatui.
 pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
     let theme = &config.theme;
     let size = f.area();
 
-    // Background
+    // Render the main background (optional based on transparency config).
     if !theme.transparent {
-        f.render_widget(Block::default().style(Style::default().bg(theme.crust())), size);
+        f.render_widget(
+            Block::default().style(Style::default().bg(theme.crust())),
+            size,
+        );
     }
 
-    // Main layout with horizontal padding
+    // Horizontal layout with 1-character side margins.
     let outer_layout = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Length(1), // Left padding
-            Constraint::Min(0),    // Content
-            Constraint::Length(1), // Right padding
+            Constraint::Length(1),
+            Constraint::Min(0),
+            Constraint::Length(1),
         ])
         .split(size);
 
+    // Vertical layout for the main UI components.
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1), // Top padding
-            Constraint::Min(3),    // List
-            Constraint::Length(3), // Input area
-            Constraint::Length(1), // Bottom padding
+            Constraint::Length(1), // Top margin
+            Constraint::Min(3),    // Main list
+            Constraint::Length(3), // Focused input field
+            Constraint::Length(1), // Spacer
             Constraint::Length(1), // Status bar
         ])
         .split(outer_layout[1]);
 
+    // Calculate alignment for the key-value separator based on the longest key.
     let max_key_len = app
         .vars
         .iter()
@@ -46,14 +52,15 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
         .unwrap_or(20)
         .min(40);
 
-    // List
+    // Build the interactive list of configuration variables.
     let items: Vec<ListItem> = app
         .vars
         .iter()
         .enumerate()
         .map(|(i, var)| {
             let is_selected = i == app.selected;
-            
+
+            // Show live input text for the selected item if in Insert mode.
             let val = if is_selected && matches!(app.mode, Mode::Insert) {
                 app.input.value()
             } else {
@@ -61,7 +68,9 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
             };
 
             let key_style = if is_selected {
-                Style::default().fg(theme.crust()).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(theme.crust())
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(theme.lavender())
             };
@@ -73,7 +82,10 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
             };
 
             let line = Line::from(vec![
-                Span::styled(format!(" {:<width$} ", var.key, width = max_key_len), key_style),
+                Span::styled(
+                    format!(" {:<width$} ", var.key, width = max_key_len),
+                    key_style,
+                ),
                 Span::styled("│ ", Style::default().fg(theme.surface1())),
                 Span::styled(format!(" {} ", val), value_style),
             ]);
@@ -88,21 +100,20 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
         })
         .collect();
 
-    let list = List::new(items)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
-                .title(" Config Variables ")
-                .title_style(Style::default().fg(theme.mauve()).add_modifier(Modifier::BOLD))
-                .border_style(Style::default().fg(theme.surface1())),
-        );
+    let list = List::new(items).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .title(" Config Variables ")
+            .title_style(Style::default().fg(theme.mauve()).add_modifier(Modifier::BOLD))
+            .border_style(Style::default().fg(theme.surface1())),
+    );
 
     let mut state = ListState::default();
     state.select(Some(app.selected));
     f.render_stateful_widget(list, chunks[1], &mut state);
 
-    // Input Area
+    // Render the focused input area.
     let current_var = app.vars.get(app.selected);
     let input_title = if let Some(var) = current_var {
         if var.default_value.is_empty() {
@@ -134,6 +145,7 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
         );
     f.render_widget(input, chunks[2]);
 
+    // Position the terminal cursor correctly when in Insert mode.
     if let Mode::Insert = app.mode {
         f.set_cursor_position(ratatui::layout::Position::new(
             chunks[2].x + 1 + cursor_pos as u16,
@@ -141,7 +153,7 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
         ));
     }
 
-    // Status bar
+    // Render the modern pill-style status bar.
     let (mode_str, mode_style) = match app.mode {
         Mode::Normal => (
             " NORMAL ",
@@ -159,16 +171,17 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
         ),
     };
 
-    let status_msg = app.status_message.as_deref().unwrap_or_else(|| {
-        match app.mode {
-            Mode::Normal => " navigation | i: edit | :w: save | :q: quit ",
-            Mode::Insert => " Esc: back to normal | Enter: commit ",
-        }
+    let status_msg = app.status_message.as_deref().unwrap_or_else(|| match app.mode {
+        Mode::Normal => " navigation | i: edit | :w: save | :q: quit ",
+        Mode::Insert => " Esc: back to normal | Enter: commit ",
     });
 
     let status_line = Line::from(vec![
         Span::styled(mode_str, mode_style),
-        Span::styled(format!(" {} ", status_msg), Style::default().bg(theme.surface0()).fg(theme.text())),
+        Span::styled(
+            format!(" {} ", status_msg),
+            Style::default().bg(theme.surface0()).fg(theme.text()),
+        ),
     ]);
 
     let status = Paragraph::new(status_line).style(Style::default().bg(theme.surface0()));
