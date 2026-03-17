@@ -63,6 +63,7 @@ mould config.template.json -o config.json
   - `i`: Edit the value of the currently selected key (Enter Insert Mode)
   - `o`: Append a new item to the current array
   - `O`: Prepend a new item to the current array
+  - `dd`: Delete the currently selected variable or group
   - `a`: Add missing value from template to active config
   - `/`: Search for configuration keys (Jump to matches)
   - `n`: Jump to the next search match

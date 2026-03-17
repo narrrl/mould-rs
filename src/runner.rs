@@ -124,6 +124,7 @@ where
                 (&self.config.keybinds.jump_bottom, "jump_bottom"),
                 (&self.config.keybinds.append_item, "append_item"),
                 (&self.config.keybinds.prepend_item, "prepend_item"),
+                (&self.config.keybinds.delete_item, "delete_item"),
                 (&"a".to_string(), "add_missing"),
                 (&":".to_string(), "command"),
                 (&"q".to_string(), "quit"),
@@ -158,6 +159,7 @@ where
                     "jump_bottom" => self.app.jump_bottom(),
                     "append_item" => self.app.add_array_item(true),
                     "prepend_item" => self.app.add_array_item(false),
+                    "delete_item" => self.app.delete_selected(),
                     "add_missing" => self.add_missing_item(),
                     "command" => {
                         self.command_buffer.push(':');

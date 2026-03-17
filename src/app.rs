@@ -165,6 +165,64 @@ impl App {
         self.mode = Mode::Normal;
     }
 
+    /// Deletes the currently selected item. If it's a group, deletes all children.
+    pub fn delete_selected(&mut self) {
+        if self.vars.is_empty() {
+            return;
+        }
+
+        let selected_path = self.vars[self.selected].path.clone();
+        let is_group = self.vars[self.selected].is_group;
+
+        // Identify if the item being removed is an array item
+        let array_info = parse_index(&selected_path);
+
+        // 1. Identify all items to remove
+        let mut to_remove = Vec::new();
+        to_remove.push(self.selected);
+
+        if is_group {
+            let prefix = format!("{}.", selected_path);
+            for (i, var) in self.vars.iter().enumerate() {
+                if var.path.starts_with(&prefix) {
+                    to_remove.push(i);
+                }
+            }
+        }
+
+        // 2. Perform removal (reverse order to preserve indices)
+        to_remove.sort_unstable_by(|a, b| b.cmp(a));
+        for i in to_remove {
+            self.vars.remove(i);
+        }
+
+        // 3. Re-index subsequent array items if applicable
+        if let Some((base, removed_idx)) = array_info {
+            let base = base.to_string();
+            for var in self.vars.iter_mut() {
+                if var.path.starts_with(&base) {
+                    // We need to find the index segment that matches this array
+                    if let Some((b, i, suffix)) = find_array_segment(&var.path, &base) {
+                        if b == base && i > removed_idx {
+                            let new_idx = i - 1;
+                            var.path = format!("{}[{}]{}", base, new_idx, suffix);
+                            // Also update key if it matches the old index exactly
+                            if var.key == format!("[{}]", i) {
+                                var.key = format!("[{}]", new_idx);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Adjust selection
+        if self.selected >= self.vars.len() && !self.vars.is_empty() {
+            self.selected = self.vars.len() - 1;
+        }
+        self.sync_input_with_selected();
+    }
+
     /// Adds a new item to an array if the selected item is part of one.
     pub fn add_array_item(&mut self, after: bool) {
         if self.vars.is_empty() {
@@ -227,10 +285,28 @@ impl App {
 }
 
 fn parse_index(path: &str) -> Option<(&str, usize)> {
-    if path.ends_with(']') {
-        if let Some(start) = path.rfind('[') {
-            if let Ok(idx) = path[start + 1..path.len() - 1].parse::<usize>() {
+    if let Some(end) = path.rfind(']') {
+        let segment = &path[..=end];
+        if let Some(start) = segment.rfind('[') {
+            if let Ok(idx) = segment[start + 1..end].parse::<usize>() {
+                // Return the base and index
                 return Some((&path[..start], idx));
+            }
+        }
+    }
+    None
+}
+
+/// Helper to find an array segment in a path given a base prefix.
+fn find_array_segment<'a>(path: &'a str, base: &str) -> Option<(&'a str, usize, &'a str)> {
+    if !path.starts_with(base) {
+        return None;
+    }
+    let remaining = &path[base.len()..];
+    if remaining.starts_with('[') {
+        if let Some(end) = remaining.find(']') {
+            if let Ok(idx) = remaining[1..end].parse::<usize>() {
+                return Some((&path[..base.len()], idx, &remaining[end + 1..]));
             }
         }
     }

@@ -116,6 +116,7 @@ pub struct KeybindsConfig {
     pub jump_bottom: String,
     pub append_item: String,
     pub prepend_item: String,
+    pub delete_item: String,
 }
 
 impl Default for KeybindsConfig {
@@ -134,6 +135,7 @@ impl Default for KeybindsConfig {
             jump_bottom: "G".to_string(),
             append_item: "o".to_string(),
             prepend_item: "O".to_string(),
+            delete_item: "dd".to_string(),
         }
     }
 }
