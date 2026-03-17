@@ -310,12 +310,14 @@ mod tests {
             }
         });
 
-        flatten(&json, "", &mut vars);
-        assert_eq!(vars.len(), 2);
+        flatten(&json, "", 0, "", &mut vars);
+        assert_eq!(vars.len(), 6);
 
         let mut root = Value::Object(Map::new());
         for var in vars {
-            insert_into_value(&mut root, &var.key, &var.value);
+            if !var.is_group {
+                insert_into_value(&mut root, &var.path, var.value.as_deref().unwrap_or(""));
+            }
         }
 
         // When unflattening, it parses bool back
