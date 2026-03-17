@@ -8,24 +8,38 @@ use std::fs;
 pub struct ThemeConfig {
     /// If true, skip rendering the background block to let the terminal's transparency show.
     pub transparent: bool,
-    /// Color for standard background areas (when not transparent).
-    pub crust: String,
-    /// Dark surface color for UI elements like the status bar.
-    pub surface0: String,
-    /// Light surface color for borders and dividers.
-    pub surface1: String,
-    /// Default text color.
-    pub text: String,
-    /// Color for selection highlighting and normal mode tag.
-    pub blue: String,
-    /// Color for insert mode highlighting and success status.
-    pub green: String,
-    /// Accent color for configuration keys.
-    pub lavender: String,
-    /// Accent color for primary section titles.
-    pub mauve: String,
-    /// Accent color for input field titles.
-    pub peach: String,
+    /// Default background.
+    pub bg_normal: String,
+    /// Background for selected items and standard UI elements.
+    pub bg_highlight: String,
+    /// Active element background (e.g., insert mode).
+    pub bg_active: String,
+    /// Active element background (e.g., search mode).
+    pub bg_search: String,
+    /// Standard text.
+    pub fg_normal: String,
+    /// Secondary/inactive text.
+    pub fg_dimmed: String,
+    /// Text on selected items.
+    pub fg_highlight: String,
+    /// Red/Alert color for missing items.
+    pub fg_warning: String,
+    /// Accent color for modified items.
+    pub fg_modified: String,
+    /// High-contrast accent for titles and active UI elements.
+    pub fg_accent: String,
+    /// Borders.
+    pub border_normal: String,
+    /// Active borders (e.g., input mode).
+    pub border_active: String,
+    /// Color for tree indentation depth 1.
+    pub tree_depth_1: String,
+    /// Color for tree indentation depth 2.
+    pub tree_depth_2: String,
+    /// Color for tree indentation depth 3.
+    pub tree_depth_3: String,
+    /// Color for tree indentation depth 4.
+    pub tree_depth_4: String,
 }
 
 impl ThemeConfig {
@@ -42,49 +56,45 @@ impl ThemeConfig {
         }
     }
 
-    pub fn crust(&self) -> Color {
-        Self::parse_hex(&self.crust)
-    }
-    pub fn surface0(&self) -> Color {
-        Self::parse_hex(&self.surface0)
-    }
-    pub fn surface1(&self) -> Color {
-        Self::parse_hex(&self.surface1)
-    }
-    pub fn text(&self) -> Color {
-        Self::parse_hex(&self.text)
-    }
-    pub fn blue(&self) -> Color {
-        Self::parse_hex(&self.blue)
-    }
-    pub fn green(&self) -> Color {
-        Self::parse_hex(&self.green)
-    }
-    pub fn lavender(&self) -> Color {
-        Self::parse_hex(&self.lavender)
-    }
-    pub fn mauve(&self) -> Color {
-        Self::parse_hex(&self.mauve)
-    }
-    pub fn peach(&self) -> Color {
-        Self::parse_hex(&self.peach)
-    }
+    pub fn bg_normal(&self) -> Color { Self::parse_hex(&self.bg_normal) }
+    pub fn bg_highlight(&self) -> Color { Self::parse_hex(&self.bg_highlight) }
+    pub fn bg_active(&self) -> Color { Self::parse_hex(&self.bg_active) }
+    pub fn bg_search(&self) -> Color { Self::parse_hex(&self.bg_search) }
+    pub fn fg_normal(&self) -> Color { Self::parse_hex(&self.fg_normal) }
+    pub fn fg_dimmed(&self) -> Color { Self::parse_hex(&self.fg_dimmed) }
+    pub fn fg_highlight(&self) -> Color { Self::parse_hex(&self.fg_highlight) }
+    pub fn fg_warning(&self) -> Color { Self::parse_hex(&self.fg_warning) }
+    pub fn fg_modified(&self) -> Color { Self::parse_hex(&self.fg_modified) }
+    pub fn fg_accent(&self) -> Color { Self::parse_hex(&self.fg_accent) }
+    pub fn border_normal(&self) -> Color { Self::parse_hex(&self.border_normal) }
+    pub fn border_active(&self) -> Color { Self::parse_hex(&self.border_active) }
+    pub fn tree_depth_1(&self) -> Color { Self::parse_hex(&self.tree_depth_1) }
+    pub fn tree_depth_2(&self) -> Color { Self::parse_hex(&self.tree_depth_2) }
+    pub fn tree_depth_3(&self) -> Color { Self::parse_hex(&self.tree_depth_3) }
+    pub fn tree_depth_4(&self) -> Color { Self::parse_hex(&self.tree_depth_4) }
 }
 
 impl Default for ThemeConfig {
-    /// Default theme: Catppuccin Mocha.
+    /// Default theme: Semantic Catppuccin Mocha.
     fn default() -> Self {
         Self {
             transparent: false,
-            crust: "#11111b".to_string(),
-            surface0: "#313244".to_string(),
-            surface1: "#45475a".to_string(),
-            text: "#cdd6f4".to_string(),
-            blue: "#89b4fa".to_string(),
-            green: "#a6e3a1".to_string(),
-            lavender: "#b4befe".to_string(),
-            mauve: "#cba6f7".to_string(),
-            peach: "#fab387".to_string(),
+            bg_normal: "#1e1e2e".to_string(), // base
+            bg_highlight: "#89b4fa".to_string(), // blue
+            bg_active: "#a6e3a1".to_string(), // green
+            bg_search: "#cba6f7".to_string(), // mauve
+            fg_normal: "#cdd6f4".to_string(), // text
+            fg_dimmed: "#6c7086".to_string(), // overlay0
+            fg_highlight: "#1e1e2e".to_string(), // base (dark for contrast against highlights)
+            fg_warning: "#f38ba8".to_string(), // red
+            fg_modified: "#fab387".to_string(), // peach
+            fg_accent: "#b4befe".to_string(), // lavender
+            border_normal: "#45475a".to_string(), // surface1
+            border_active: "#a6e3a1".to_string(), // green
+            tree_depth_1: "#b4befe".to_string(), // lavender
+            tree_depth_2: "#cba6f7".to_string(), // mauve
+            tree_depth_3: "#89b4fa".to_string(), // blue
+            tree_depth_4: "#fab387".to_string(), // peach
         }
     }
 }
@@ -102,6 +112,8 @@ pub struct KeybindsConfig {
     pub search: String,
     pub next_match: String,
     pub previous_match: String,
+    pub jump_top: String,
+    pub jump_bottom: String,
 }
 
 impl Default for KeybindsConfig {
@@ -116,6 +128,8 @@ impl Default for KeybindsConfig {
             search: "/".to_string(),
             next_match: "n".to_string(),
             previous_match: "N".to_string(),
+            jump_top: "gg".to_string(),
+            jump_bottom: "G".to_string(),
         }
     }
 }

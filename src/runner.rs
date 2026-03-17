@@ -22,6 +22,8 @@ pub struct AppRunner<'a, B: Backend> {
     handler: &'a dyn FormatHandler,
     /// Buffer for storing active command entry (e.g., ":w").
     command_buffer: String,
+    /// Buffer for storing sequence of key presses (e.g., "gg").
+    key_sequence: String,
 }
 
 impl<'a, B: Backend> AppRunner<'a, B>
@@ -43,6 +45,7 @@ where
             output_path,
             handler,
             command_buffer: String::new(),
+            key_sequence: String::new(),
         }
     }
 
@@ -107,36 +110,88 @@ where
     /// Handles primary navigation (j/k) and transitions to insert or command modes.
     fn handle_navigation_mode(&mut self, key: KeyEvent) -> io::Result<()> {
         if let KeyCode::Char(c) = key.code {
-            let c_str = c.to_string();
-            if c_str == self.config.keybinds.down {
-                self.app.next();
-            } else if c_str == self.config.keybinds.up {
-                self.app.previous();
-            } else if c_str == self.config.keybinds.edit {
-                self.app.enter_insert();
-            } else if c_str == ":" {
-                self.command_buffer.push(':');
-                self.sync_command_status();
-            } else if c_str == "q" {
-                self.app.running = false;
-            } else if c_str == self.config.keybinds.search {
-                self.app.mode = Mode::Search;
-                self.app.search_query.clear();
-                self.app.status_message = Some(format!("{} ", self.config.keybinds.search));
-            } else if c_str == self.config.keybinds.next_match {
-                self.app.jump_next_match();
-            } else if c_str == self.config.keybinds.previous_match {
-                self.app.jump_previous_match();
+            self.key_sequence.push(c);
+
+            // Collect all configured keybinds
+            let binds = [
+                (&self.config.keybinds.down, "down"),
+                (&self.config.keybinds.up, "up"),
+                (&self.config.keybinds.edit, "edit"),
+                (&self.config.keybinds.search, "search"),
+                (&self.config.keybinds.next_match, "next_match"),
+                (&self.config.keybinds.previous_match, "previous_match"),
+                (&self.config.keybinds.jump_top, "jump_top"),
+                (&self.config.keybinds.jump_bottom, "jump_bottom"),
+                (&"a".to_string(), "add_missing"),
+                (&":".to_string(), "command"),
+                (&"q".to_string(), "quit"),
+            ];
+
+            let mut exact_match = None;
+            let mut prefix_match = false;
+
+            for (bind, action) in binds.iter() {
+                if bind == &&self.key_sequence {
+                    exact_match = Some(*action);
+                    break;
+                } else if bind.starts_with(&self.key_sequence) {
+                    prefix_match = true;
+                }
+            }
+
+            if let Some(action) = exact_match {
+                self.key_sequence.clear();
+                match action {
+                    "down" => self.app.next(),
+                    "up" => self.app.previous(),
+                    "edit" => self.app.enter_insert(),
+                    "search" => {
+                        self.app.mode = Mode::Search;
+                        self.app.search_query.clear();
+                        self.app.status_message = Some(format!("{} ", self.config.keybinds.search));
+                    }
+                    "next_match" => self.app.jump_next_match(),
+                    "previous_match" => self.app.jump_previous_match(),
+                    "jump_top" => self.app.jump_top(),
+                    "jump_bottom" => self.app.jump_bottom(),
+                    "add_missing" => self.add_missing_item(),
+                    "command" => {
+                        self.command_buffer.push(':');
+                        self.sync_command_status();
+                    }
+                    "quit" => self.app.running = false,
+                    _ => {}
+                }
+            } else if !prefix_match {
+                // Not an exact match and not a prefix for any bind, clear and restart seq
+                self.key_sequence.clear();
+                self.key_sequence.push(c);
             }
         } else {
+            // Non-character keys reset the sequence buffer
+            self.key_sequence.clear();
             match key.code {
                 KeyCode::Down => self.app.next(),
                 KeyCode::Up => self.app.previous(),
                 KeyCode::Enter => self.save_file()?,
+                KeyCode::Esc => self.app.status_message = None,
                 _ => {}
             }
         }
         Ok(())
+    }
+
+    /// Adds a missing item from the template to the active configuration.
+    fn add_missing_item(&mut self) {
+        if let Some(var) = self.app.vars.get_mut(self.app.selected) {
+            if var.status == crate::format::ItemStatus::MissingFromActive {
+                var.status = crate::format::ItemStatus::Present;
+                if !var.is_group {
+                    var.value = var.template_value.clone();
+                }
+                self.app.sync_input_with_selected();
+            }
+        }
     }
 
     /// Delegates key events to the `tui_input` handler during active editing.

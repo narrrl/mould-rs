@@ -171,23 +171,74 @@ fn main() -> anyhow::Result<()> {
     let format_type = detect_format(&input_path, args.format);
     let handler = get_handler(format_type);
 
+    // Smart Comparison Logic
+    let input_name = input_path.file_name().unwrap_or_default().to_string_lossy();
+    let is_template_input = input_name.contains(".example") || input_name.contains(".template") || input_name == "compose.yml" || input_name == "docker-compose.yml";
+    
+    let mut template_path = None;
+    let mut active_path = None;
+
+    if is_template_input {
+        template_path = Some(input_path.clone());
+        let expected_active = determine_output_path(&input_path);
+        if expected_active.exists() {
+            active_path = Some(expected_active);
+        }
+    } else {
+        // Input is likely an active config (e.g., .env)
+        active_path = Some(input_path.clone());
+        // Try to find a template
+        let possible_templates = [
+            format!("{}.example", input_name),
+            format!("{}.template", input_name),
+        ];
+        for t in possible_templates {
+            let p = input_path.with_file_name(t);
+            if p.exists() {
+                template_path = Some(p);
+                break;
+            }
+        }
+    }
+
     let output_path = args
         .output
-        .unwrap_or_else(|| determine_output_path(&input_path));
+        .unwrap_or_else(|| active_path.clone().unwrap_or_else(|| determine_output_path(&input_path)));
 
     info!("Output: {}", output_path.display());
 
-    let mut vars = handler.parse(&input_path).map_err(|e| {
-        error!("Failed to parse input file: {}", e);
-        MouldError::Format(format!("Failed to parse {}: {}", input_path.display(), e))
-    })?;
+    // 1. Load active config if it exists
+    let mut vars = if let Some(active) = &active_path {
+        handler.parse(active).unwrap_or_default()
+    } else {
+        Vec::new()
+    };
 
-    if vars.is_empty() {
-        warn!("No variables found in {}", input_path.display());
+    // 2. Load template config and merge
+    if let Some(template) = &template_path {
+        info!("Comparing with template: {}", template.display());
+        let template_vars = handler.parse(template).unwrap_or_default();
+        if vars.is_empty() {
+             vars = template_vars;
+             // If we only have template, everything is missing from active initially
+             for v in vars.iter_mut() {
+                 v.status = crate::format::ItemStatus::MissingFromActive;
+                 v.value = None;
+             }
+        } else {
+             // Merge template into active
+             handler.merge(template, &mut vars).unwrap_or_default();
+        }
+    } else if vars.is_empty() {
+        // Fallback if no template and active is empty
+         vars = handler.parse(&input_path).map_err(|e| {
+            error!("Failed to parse input file: {}", e);
+            MouldError::Format(format!("Failed to parse {}: {}", input_path.display(), e))
+        })?;
     }
 
-    if let Err(e) = handler.merge(&output_path, &mut vars) {
-        warn!("Could not merge existing output file: {}", e);
+    if vars.is_empty() {
+        warn!("No variables found.");
     }
 
     let config = load_config();
