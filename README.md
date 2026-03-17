@@ -11,6 +11,8 @@ mould is a modern Terminal User Interface (TUI) tool designed for interactively 
 - **Modern UI**: A polished, rounded interface featuring the Catppuccin Mocha palette.
 - **Highly Configurable**: Customize keybindings and themes via a simple TOML configuration.
 - **Dynamic Alignment**: Automatically aligns keys and values for perfect vertical readability.
+- **Default Value Visibility**: Keep track of original template values while editing.
+- **Incremental Merging**: Load existing values from an output file to continue where you left off.
 
 ## Installation
 
@@ -46,6 +48,9 @@ mould config.template.json -o config.json
   - `j` / `Down`: Move selection down
   - `k` / `Up`: Move selection up
   - `i`: Edit the value of the currently selected key (Enter Insert Mode)
+  - `/`: Search for configuration keys (Jump to matches)
+  - `n`: Jump to the next search match
+  - `N`: Jump to the previous search match
   - `:w` or `Enter`: Save the current configuration to the output file
   - `:q` or `q`: Quit the application
   - `:wq`: Save and quit
@@ -72,7 +77,19 @@ quit = ":q"
 normal_mode = "Esc"
 
 [theme]
-name = "catppuccin_mocha"
+# Enable transparency to let your terminal background show through
+transparent = false
+
+# Custom color palette (Catppuccin Mocha defaults)
+crust = "#11111b"
+surface0 = "#313244"
+surface1 = "#45475a"
+text = "#cdd6f4"
+blue = "#89b4fa"
+green = "#a6e3a1"
+lavender = "#b4befe"
+mauve = "#cba6f7"
+peach = "#fab387"
 ```
 
 ## License

@@ -1,0 +1,49 @@
+# mould Configuration Example
+# Place this file at ~/.config/mould/config.toml (Linux/macOS)
+# or %AppData%\mould\config.toml (Windows)
+
+[theme]
+# If true, skip rendering the background block to let the terminal's transparency show.
+transparent = false
+
+# Colors are specified in hex format ("#RRGGBB").
+# Default values follow the Catppuccin Mocha palette.
+
+# Main background color (used when transparent = false).
+crust = "#11111b"
+
+# Status bar background and other secondary UI elements.
+surface0 = "#313244"
+
+# Border and separator color.
+surface1 = "#45475a"
+
+# Default text color.
+text = "#cdd6f4"
+
+# Selection highlight and "NORMAL" mode tag color.
+blue = "#89b4fa"
+
+# Insert mode highlight and "INSERT" mode tag color.
+green = "#a6e3a1"
+
+# Keys/labels color.
+lavender = "#b4befe"
+
+# Section titles color.
+mauve = "#cba6f7"
+
+# Input field titles color.
+peach = "#fab387"
+
+[keybinds]
+# Keybindings for navigation and application control.
+down = "j"
+up = "k"
+edit = "i"
+save = ":w"
+quit = ":q"
+normal_mode = "Esc"
+search = "/"
+next_match = "n"
+previous_match = "N"

@@ -2,8 +2,8 @@ use crate::app::{App, Mode};
 use crate::config::Config;
 use crate::format::FormatHandler;
 use crossterm::event::{self, Event, KeyCode, KeyEvent};
-use ratatui::backend::Backend;
 use ratatui::Terminal;
+use ratatui::backend::Backend;
 use std::io;
 use std::path::Path;
 use tui_input::backend::crossterm::EventHandler;
@@ -64,6 +64,7 @@ where
         match self.app.mode {
             Mode::Normal => self.handle_normal_mode(key),
             Mode::Insert => self.handle_insert_mode(key),
+            Mode::Search => self.handle_search_mode(key),
         }
     }
 
@@ -118,6 +119,14 @@ where
                 self.sync_command_status();
             } else if c_str == "q" {
                 self.app.running = false;
+            } else if c_str == self.config.keybinds.search {
+                self.app.mode = Mode::Search;
+                self.app.search_query.clear();
+                self.app.status_message = Some(format!("{} ", self.config.keybinds.search));
+            } else if c_str == self.config.keybinds.next_match {
+                self.app.jump_next_match();
+            } else if c_str == self.config.keybinds.previous_match {
+                self.app.jump_previous_match();
             }
         } else {
             match key.code {
@@ -139,6 +148,28 @@ where
             _ => {
                 self.app.input.handle_event(&Event::Key(key));
             }
+        }
+        Ok(())
+    }
+
+    /// Handles search mode key events.
+    fn handle_search_mode(&mut self, key: KeyEvent) -> io::Result<()> {
+        match key.code {
+            KeyCode::Enter | KeyCode::Esc => {
+                self.app.mode = Mode::Normal;
+                self.app.status_message = None;
+            }
+            KeyCode::Backspace => {
+                self.app.search_query.pop();
+                self.app.status_message = Some(format!("{}{}", self.config.keybinds.search, self.app.search_query));
+                self.app.jump_next_match();
+            }
+            KeyCode::Char(c) => {
+                self.app.search_query.push(c);
+                self.app.status_message = Some(format!("{}{}", self.config.keybinds.search, self.app.search_query));
+                self.app.jump_next_match();
+            }
+            _ => {}
         }
         Ok(())
     }

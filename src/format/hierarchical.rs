@@ -16,9 +16,12 @@ impl HierarchicalHandler {
     fn read_value(&self, path: &Path) -> io::Result<Value> {
         let content = fs::read_to_string(path)?;
         let value = match self.format_type {
-            FormatType::Json => serde_json::from_str(&content).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
-            FormatType::Yaml => serde_yaml::from_str(&content).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
-            FormatType::Toml => toml::from_str(&content).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
+            FormatType::Json => serde_json::from_str(&content)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
+            FormatType::Yaml => serde_yaml::from_str(&content)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
+            FormatType::Toml => toml::from_str(&content)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
             _ => unreachable!(),
         };
         Ok(value)
@@ -26,15 +29,22 @@ impl HierarchicalHandler {
 
     fn write_value(&self, path: &Path, value: &Value) -> io::Result<()> {
         let content = match self.format_type {
-            FormatType::Json => serde_json::to_string_pretty(value).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
-            FormatType::Yaml => serde_yaml::to_string(value).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
+            FormatType::Json => serde_json::to_string_pretty(value)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
+            FormatType::Yaml => serde_yaml::to_string(value)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
             FormatType::Toml => {
                 // toml requires the root to be a table
                 if value.is_object() {
-                    let toml_value: toml::Value = serde_json::from_value(value.clone()).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-                    toml::to_string_pretty(&toml_value).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
+                    let toml_value: toml::Value = serde_json::from_value(value.clone())
+                        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+                    toml::to_string_pretty(&toml_value)
+                        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
                 } else {
-                    return Err(io::Error::new(io::ErrorKind::InvalidData, "Root of TOML must be an object"));
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "Root of TOML must be an object",
+                    ));
                 }
             }
             _ => unreachable!(),
@@ -143,7 +153,7 @@ fn insert_into_value(root: &mut Value, path: &str, new_val_str: &str) {
             *current = Value::Object(Map::new());
         }
         let map = current.as_object_mut().unwrap();
-        
+
         let next_node = map.entry(key.to_string()).or_insert_with(|| {
             if idx.is_some() {
                 Value::Array(Vec::new())
@@ -171,7 +181,7 @@ fn insert_into_value(root: &mut Value, path: &str, new_val_str: &str) {
         *current = Value::Object(Map::new());
     }
     let map = current.as_object_mut().unwrap();
-    
+
     // Attempt basic type inference
     let final_val = if let Ok(n) = new_val_str.parse::<i64>() {
         Value::Number(n.into())
@@ -182,7 +192,9 @@ fn insert_into_value(root: &mut Value, path: &str, new_val_str: &str) {
     };
 
     if let Some(i) = final_idx {
-        let next_node = map.entry(final_key.to_string()).or_insert_with(|| Value::Array(Vec::new()));
+        let next_node = map
+            .entry(final_key.to_string())
+            .or_insert_with(|| Value::Array(Vec::new()));
         if !next_node.is_array() {
             *next_node = Value::Array(Vec::new());
         }
@@ -200,7 +212,7 @@ fn parse_array_key(part: &str) -> (&str, Option<usize>) {
     if part.ends_with(']') && part.contains('[') {
         let start_idx = part.find('[').unwrap();
         let key = &part[..start_idx];
-        let idx = part[start_idx+1..part.len()-1].parse::<usize>().ok();
+        let idx = part[start_idx + 1..part.len() - 1].parse::<usize>().ok();
         (key, idx)
     } else {
         (part, None)
@@ -224,15 +236,15 @@ mod tests {
                 }
             }
         });
-        
+
         flatten(&json, "", &mut vars);
         assert_eq!(vars.len(), 2);
-        
+
         let mut root = Value::Object(Map::new());
         for var in vars {
             insert_into_value(&mut root, &var.key, &var.value);
         }
-        
+
         // When unflattening, it parses bool back
         let unflattened_json = serde_json::to_string(&root).unwrap();
         assert!(unflattened_json.contains("\"8080:80\""));

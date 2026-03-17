@@ -1,11 +1,11 @@
 use crate::app::{App, Mode};
 use crate::config::Config;
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph},
-    Frame,
 };
 
 /// Renders the main application interface using ratatui.
@@ -43,22 +43,15 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
         ])
         .split(outer_layout[1]);
 
-    // Calculate alignment for the key-value separator based on the longest key.
-    let max_key_len = app
-        .vars
-        .iter()
-        .map(|v| v.key.len())
-        .max()
-        .unwrap_or(20)
-        .min(40);
-
     // Build the interactive list of configuration variables.
+    let matching_indices = app.matching_indices();
     let items: Vec<ListItem> = app
         .vars
         .iter()
         .enumerate()
         .map(|(i, var)| {
             let is_selected = i == app.selected;
+            let is_match = matching_indices.contains(&i);
 
             // Show live input text for the selected item if in Insert mode.
             let val = if is_selected && matches!(app.mode, Mode::Insert) {
@@ -71,6 +64,10 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
                 Style::default()
                     .fg(theme.crust())
                     .add_modifier(Modifier::BOLD)
+            } else if is_match {
+                Style::default()
+                    .fg(theme.mauve())
+                    .add_modifier(Modifier::UNDERLINED)
             } else {
                 Style::default().fg(theme.lavender())
             };
@@ -81,14 +78,25 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
                 Style::default().fg(theme.text())
             };
 
-            let line = Line::from(vec![
-                Span::styled(
-                    format!(" {:<width$} ", var.key, width = max_key_len),
-                    key_style,
-                ),
-                Span::styled("│ ", Style::default().fg(theme.surface1())),
-                Span::styled(format!(" {} ", val), value_style),
-            ]);
+            // Path styling for nested keys (e.g., a.b.c)
+            let mut key_spans = Vec::new();
+            if let Some(last_dot) = var.key.rfind('.') {
+                let path = &var.key[..=last_dot];
+                let key = &var.key[last_dot + 1..];
+
+                let path_style = if is_selected {
+                    Style::default()
+                        .fg(theme.crust())
+                        .add_modifier(Modifier::DIM)
+                } else {
+                    Style::default().fg(theme.surface1())
+                };
+
+                key_spans.push(Span::styled(path, path_style));
+                key_spans.push(Span::styled(key, key_style));
+            } else {
+                key_spans.push(Span::styled(&var.key, key_style));
+            }
 
             let item_style = if is_selected {
                 Style::default().bg(theme.blue())
@@ -96,7 +104,25 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
                 Style::default().fg(theme.text())
             };
 
-            ListItem::new(line).style(item_style)
+            // Two-line layout for better readability:
+            // Line 1: Key (path.key)
+            // Line 2: Value
+            let lines = vec![
+                Line::from(key_spans),
+                Line::from(vec![
+                    Span::styled(
+                        "  └─ ",
+                        if is_selected {
+                            Style::default().fg(theme.crust())
+                        } else {
+                            Style::default().fg(theme.surface1())
+                        },
+                    ),
+                    Span::styled(val, value_style),
+                ]),
+            ];
+
+            ListItem::new(lines).style(item_style)
         })
         .collect();
 
@@ -105,7 +131,11 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .title(" Config Variables ")
-            .title_style(Style::default().fg(theme.mauve()).add_modifier(Modifier::BOLD))
+            .title_style(
+                Style::default()
+                    .fg(theme.mauve())
+                    .add_modifier(Modifier::BOLD),
+            )
             .border_style(Style::default().fg(theme.surface1())),
     );
 
@@ -127,7 +157,7 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
 
     let input_border_color = match app.mode {
         Mode::Insert => theme.green(),
-        Mode::Normal => theme.surface1(),
+        Mode::Normal | Mode::Search => theme.surface1(),
     };
 
     let input_text = app.input.value();
@@ -140,7 +170,11 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
                 .title(input_title)
-                .title_style(Style::default().fg(theme.peach()).add_modifier(Modifier::BOLD))
+                .title_style(
+                    Style::default()
+                        .fg(theme.peach())
+                        .add_modifier(Modifier::BOLD),
+                )
                 .border_style(Style::default().fg(input_border_color)),
         );
     f.render_widget(input, chunks[2]);
@@ -169,12 +203,23 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
                 .fg(theme.crust())
                 .add_modifier(Modifier::BOLD),
         ),
+        Mode::Search => (
+            " SEARCH ",
+            Style::default()
+                .bg(theme.mauve())
+                .fg(theme.crust())
+                .add_modifier(Modifier::BOLD),
+        ),
     };
 
-    let status_msg = app.status_message.as_deref().unwrap_or_else(|| match app.mode {
-        Mode::Normal => " navigation | i: edit | :w: save | :q: quit ",
-        Mode::Insert => " Esc: back to normal | Enter: commit ",
-    });
+    let status_msg = app
+        .status_message
+        .as_deref()
+        .unwrap_or_else(|| match app.mode {
+            Mode::Normal => " navigation | i: edit | /: search | :w: save | :q: quit ",
+            Mode::Insert => " Esc: back to normal | Enter: commit ",
+            Mode::Search => " Esc: back to normal | type to filter ",
+        });
 
     let status_line = Line::from(vec![
         Span::styled(mode_str, mode_style),

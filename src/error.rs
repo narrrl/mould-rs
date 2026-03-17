@@ -1,5 +1,5 @@
-use thiserror::Error;
 use std::io;
+use thiserror::Error;
 
 /// Custom error types for the mould application.
 #[derive(Error, Debug)]

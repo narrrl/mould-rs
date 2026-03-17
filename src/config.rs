@@ -1,12 +1,12 @@
+use ratatui::style::Color;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use ratatui::style::Color;
 
 /// Configuration for the application's appearance.
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(default)]
 pub struct ThemeConfig {
     /// If true, skip rendering the background block to let the terminal's transparency show.
-    #[serde(default)]
     pub transparent: bool,
     /// Color for standard background areas (when not transparent).
     pub crust: String,
@@ -42,15 +42,33 @@ impl ThemeConfig {
         }
     }
 
-    pub fn crust(&self) -> Color { Self::parse_hex(&self.crust) }
-    pub fn surface0(&self) -> Color { Self::parse_hex(&self.surface0) }
-    pub fn surface1(&self) -> Color { Self::parse_hex(&self.surface1) }
-    pub fn text(&self) -> Color { Self::parse_hex(&self.text) }
-    pub fn blue(&self) -> Color { Self::parse_hex(&self.blue) }
-    pub fn green(&self) -> Color { Self::parse_hex(&self.green) }
-    pub fn lavender(&self) -> Color { Self::parse_hex(&self.lavender) }
-    pub fn mauve(&self) -> Color { Self::parse_hex(&self.mauve) }
-    pub fn peach(&self) -> Color { Self::parse_hex(&self.peach) }
+    pub fn crust(&self) -> Color {
+        Self::parse_hex(&self.crust)
+    }
+    pub fn surface0(&self) -> Color {
+        Self::parse_hex(&self.surface0)
+    }
+    pub fn surface1(&self) -> Color {
+        Self::parse_hex(&self.surface1)
+    }
+    pub fn text(&self) -> Color {
+        Self::parse_hex(&self.text)
+    }
+    pub fn blue(&self) -> Color {
+        Self::parse_hex(&self.blue)
+    }
+    pub fn green(&self) -> Color {
+        Self::parse_hex(&self.green)
+    }
+    pub fn lavender(&self) -> Color {
+        Self::parse_hex(&self.lavender)
+    }
+    pub fn mauve(&self) -> Color {
+        Self::parse_hex(&self.mauve)
+    }
+    pub fn peach(&self) -> Color {
+        Self::parse_hex(&self.peach)
+    }
 }
 
 impl Default for ThemeConfig {
@@ -73,6 +91,7 @@ impl Default for ThemeConfig {
 
 /// Custom keybindings for navigation and application control.
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(default)]
 pub struct KeybindsConfig {
     pub down: String,
     pub up: String,
@@ -80,6 +99,9 @@ pub struct KeybindsConfig {
     pub save: String,
     pub quit: String,
     pub normal_mode: String,
+    pub search: String,
+    pub next_match: String,
+    pub previous_match: String,
 }
 
 impl Default for KeybindsConfig {
@@ -91,6 +113,9 @@ impl Default for KeybindsConfig {
             save: ":w".to_string(),
             quit: ":q".to_string(),
             normal_mode: "Esc".to_string(),
+            search: "/".to_string(),
+            next_match: "n".to_string(),
+            previous_match: "N".to_string(),
         }
     }
 }
