@@ -4,8 +4,8 @@ use std::path::PathBuf;
 /// mould: A TUI tool to generate and edit configuration files (.env, json, yaml, toml)
 #[derive(Parser, Debug)]
 #[command(
-    author, 
-    version, 
+    author,
+    version,
     about = "mould: A TUI tool to generate and edit configuration files (.env, json, yaml, toml)",
     long_about = "mould allows you to interactively edit and generate configuration files using templates. It supports various formats including .env, JSON, YAML, and TOML. It features a modern TUI with Vim-inspired keybindings and out-of-the-box support for theming.",
     after_help = "EXAMPLES:\n  mould .env.example\n  mould docker-compose.yml\n  mould config.template.json -o config.json"

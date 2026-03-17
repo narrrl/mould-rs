@@ -1,6 +1,6 @@
+use ratatui::style::Color;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use ratatui::style::Color;
 
 /// Configuration for the application's appearance.
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -42,15 +42,33 @@ impl ThemeConfig {
         }
     }
 
-    pub fn crust(&self) -> Color { Self::parse_hex(&self.crust) }
-    pub fn surface0(&self) -> Color { Self::parse_hex(&self.surface0) }
-    pub fn surface1(&self) -> Color { Self::parse_hex(&self.surface1) }
-    pub fn text(&self) -> Color { Self::parse_hex(&self.text) }
-    pub fn blue(&self) -> Color { Self::parse_hex(&self.blue) }
-    pub fn green(&self) -> Color { Self::parse_hex(&self.green) }
-    pub fn lavender(&self) -> Color { Self::parse_hex(&self.lavender) }
-    pub fn mauve(&self) -> Color { Self::parse_hex(&self.mauve) }
-    pub fn peach(&self) -> Color { Self::parse_hex(&self.peach) }
+    pub fn crust(&self) -> Color {
+        Self::parse_hex(&self.crust)
+    }
+    pub fn surface0(&self) -> Color {
+        Self::parse_hex(&self.surface0)
+    }
+    pub fn surface1(&self) -> Color {
+        Self::parse_hex(&self.surface1)
+    }
+    pub fn text(&self) -> Color {
+        Self::parse_hex(&self.text)
+    }
+    pub fn blue(&self) -> Color {
+        Self::parse_hex(&self.blue)
+    }
+    pub fn green(&self) -> Color {
+        Self::parse_hex(&self.green)
+    }
+    pub fn lavender(&self) -> Color {
+        Self::parse_hex(&self.lavender)
+    }
+    pub fn mauve(&self) -> Color {
+        Self::parse_hex(&self.mauve)
+    }
+    pub fn peach(&self) -> Color {
+        Self::parse_hex(&self.peach)
+    }
 }
 
 impl Default for ThemeConfig {

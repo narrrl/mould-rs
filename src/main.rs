@@ -18,32 +18,32 @@ use std::path::{Path, PathBuf};
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{Terminal, backend::CrosstermBackend};
 
 /// Helper to automatically determine the output file path based on common naming conventions.
 fn determine_output_path(input: &Path) -> PathBuf {
     let file_name = input.file_name().unwrap_or_default().to_string_lossy();
-    
+
     if file_name == ".env.example" {
         return input.with_file_name(".env");
     }
-    
-    if file_name == "docker-compose.yml" {
-        return input.with_file_name("docker-compose.override.yml");
+
+    if file_name == "docker-compose.yml" || file_name == "compose.yml" {
+        return input.with_file_name("compose.override.yml");
     }
-    if file_name == "docker-compose.yaml" {
-        return input.with_file_name("docker-compose.override.yaml");
+    if file_name == "docker-compose.yaml" || file_name == "compose.yaml" {
+        return input.with_file_name("compose.override.yaml");
     }
-    
+
     if file_name.ends_with(".example.json") {
         return input.with_file_name(file_name.replace(".example.json", ".json"));
     }
     if file_name.ends_with(".template.json") {
         return input.with_file_name(file_name.replace(".template.json", ".json"));
     }
-    
+
     input.with_extension(format!(
         "{}.out",
         input.extension().unwrap_or_default().to_string_lossy()
@@ -98,7 +98,8 @@ fn main() -> anyhow::Result<()> {
     let mut app = App::new(vars);
 
     // Terminal lifecycle
-    enable_raw_mode().map_err(|e| MouldError::Terminal(format!("Failed to enable raw mode: {}", e)))?;
+    enable_raw_mode()
+        .map_err(|e| MouldError::Terminal(format!("Failed to enable raw mode: {}", e)))?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)
         .map_err(|e| MouldError::Terminal(format!("Failed to enter alternate screen: {}", e)))?;
@@ -106,7 +107,13 @@ fn main() -> anyhow::Result<()> {
     let mut terminal = Terminal::new(backend)
         .map_err(|e| MouldError::Terminal(format!("Failed to create terminal backend: {}", e)))?;
 
-    let mut runner = AppRunner::new(&mut terminal, &mut app, &config, &output_path, handler.as_ref());
+    let mut runner = AppRunner::new(
+        &mut terminal,
+        &mut app,
+        &config,
+        &output_path,
+        handler.as_ref(),
+    );
     let res = runner.run();
 
     // Restoration
@@ -115,14 +122,15 @@ fn main() -> anyhow::Result<()> {
         terminal.backend_mut(),
         LeaveAlternateScreen,
         DisableMouseCapture
-    ).ok();
+    )
+    .ok();
     terminal.show_cursor().ok();
 
     match res {
         Ok(_) => {
             info!("Successfully finished mould session.");
             Ok(())
-        },
+        }
         Err(e) => {
             error!("Application error during run: {}", e);
             Err(e.into())
