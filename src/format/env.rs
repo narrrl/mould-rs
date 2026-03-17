@@ -1,4 +1,4 @@
-use super::{EnvVar, FormatHandler};
+use super::{ConfigItem, FormatHandler, ItemStatus};
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
@@ -6,7 +6,7 @@ use std::path::Path;
 pub struct EnvHandler;
 
 impl FormatHandler for EnvHandler {
-    fn parse(&self, path: &Path) -> io::Result<Vec<EnvVar>> {
+    fn parse(&self, path: &Path) -> io::Result<Vec<ConfigItem>> {
         let content = fs::read_to_string(path)?;
         let mut vars = Vec::new();
 
@@ -18,10 +18,15 @@ impl FormatHandler for EnvHandler {
 
             if let Some((key, val)) = line.split_once('=') {
                 let parsed_val = val.trim().trim_matches('"').trim_matches('\'').to_string();
-                vars.push(EnvVar {
+                vars.push(ConfigItem {
                     key: key.trim().to_string(),
-                    value: parsed_val.clone(),
-                    default_value: parsed_val,
+                    path: key.trim().to_string(),
+                    value: Some(parsed_val.clone()),
+                    template_value: Some(parsed_val.clone()),
+                    default_value: Some(parsed_val),
+                    depth: 0,
+                    is_group: false,
+                    status: ItemStatus::Present,
                 });
             }
         }
@@ -29,7 +34,7 @@ impl FormatHandler for EnvHandler {
         Ok(vars)
     }
 
-    fn merge(&self, path: &Path, vars: &mut Vec<EnvVar>) -> io::Result<()> {
+    fn merge(&self, path: &Path, vars: &mut Vec<ConfigItem>) -> io::Result<()> {
         if !path.exists() {
             return Ok(());
         }
@@ -46,24 +51,44 @@ impl FormatHandler for EnvHandler {
                 let parsed_val = val.trim().trim_matches('"').trim_matches('\'').to_string();
 
                 if let Some(var) = vars.iter_mut().find(|v| v.key == key) {
-                    var.value = parsed_val;
+                    if var.value.as_deref() != Some(&parsed_val) {
+                        var.value = Some(parsed_val);
+                        var.status = ItemStatus::Modified;
+                    }
                 } else {
-                    vars.push(EnvVar {
+                    vars.push(ConfigItem {
                         key: key.to_string(),
-                        value: parsed_val.clone(),
-                        default_value: String::new(),
+                        path: key.to_string(),
+                        value: Some(parsed_val),
+                        template_value: None,
+                        default_value: None,
+                        depth: 0,
+                        is_group: false,
+                        status: ItemStatus::MissingFromTemplate,
                     });
                 }
+            }
+        }
+        
+        // Mark missing from active
+        for var in vars.iter_mut() {
+            if var.status == ItemStatus::Present && var.value.is_none() {
+                var.status = ItemStatus::MissingFromActive;
             }
         }
 
         Ok(())
     }
 
-    fn write(&self, path: &Path, vars: &[EnvVar]) -> io::Result<()> {
+    fn write(&self, path: &Path, vars: &[ConfigItem]) -> io::Result<()> {
         let mut file = fs::File::create(path)?;
         for var in vars {
-            writeln!(file, "{}={}", var.key, var.value)?;
+            if !var.is_group {
+                let val = var.value.as_deref()
+                    .or(var.template_value.as_deref())
+                    .unwrap_or("");
+                writeln!(file, "{}={}", var.key, val)?;
+            }
         }
         Ok(())
     }
@@ -88,14 +113,13 @@ mod tests {
         let vars = handler.parse(file.path()).unwrap();
         assert_eq!(vars.len(), 4);
         assert_eq!(vars[0].key, "KEY1");
-        assert_eq!(vars[0].value, "value1");
-        assert_eq!(vars[0].default_value, "value1");
+        assert_eq!(vars[0].value.as_deref(), Some("value1"));
         assert_eq!(vars[1].key, "KEY2");
-        assert_eq!(vars[1].value, "value2");
+        assert_eq!(vars[1].value.as_deref(), Some("value2"));
         assert_eq!(vars[2].key, "KEY3");
-        assert_eq!(vars[2].value, "value3");
+        assert_eq!(vars[2].value.as_deref(), Some("value3"));
         assert_eq!(vars[3].key, "EMPTY");
-        assert_eq!(vars[3].value, "");
+        assert_eq!(vars[3].value.as_deref(), Some(""));
     }
 
     #[test]
@@ -112,25 +136,29 @@ mod tests {
 
         assert_eq!(vars.len(), 3);
         assert_eq!(vars[0].key, "KEY1");
-        assert_eq!(vars[0].value, "custom1");
-        assert_eq!(vars[0].default_value, "default1");
+        assert_eq!(vars[0].value.as_deref(), Some("custom1"));
+        assert_eq!(vars[0].status, ItemStatus::Modified);
 
         assert_eq!(vars[1].key, "KEY2");
-        assert_eq!(vars[1].value, "default2");
-        assert_eq!(vars[1].default_value, "default2");
-
+        assert_eq!(vars[1].value.as_deref(), Some("default2"));
+        
         assert_eq!(vars[2].key, "KEY3");
-        assert_eq!(vars[2].value, "custom3");
-        assert_eq!(vars[2].default_value, "");
+        assert_eq!(vars[2].value.as_deref(), Some("custom3"));
+        assert_eq!(vars[2].status, ItemStatus::MissingFromTemplate);
     }
 
     #[test]
     fn test_write_env() {
         let file = NamedTempFile::new().unwrap();
-        let vars = vec![EnvVar {
+        let vars = vec![ConfigItem {
             key: "KEY1".to_string(),
-            value: "value1".to_string(),
-            default_value: "def".to_string(),
+            path: "KEY1".to_string(),
+            value: Some("value1".to_string()),
+            template_value: None,
+            default_value: None,
+            depth: 0,
+            is_group: false,
+            status: ItemStatus::Present,
         }];
 
         let handler = EnvHandler;

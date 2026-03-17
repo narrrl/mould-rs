@@ -5,17 +5,18 @@ mould is a modern Terminal User Interface (TUI) tool designed for interactively 
 ## Features
 
 - **Universal Format Support**: Handle `.env`, `JSON`, `YAML`, and `TOML` seamlessly.
-- **Hierarchical Flattening**: Edit nested data structures (JSON, YAML, TOML) in a flat, searchable list.
+- **Tree View Navigation**: Edit nested data structures (JSON, YAML, TOML) in a beautiful, depth-colored tree view.
+- **Smart Template Comparison**: Automatically discovers `.env.example` vs `.env` relationships and highlights missing or modified keys.
+- **Add Missing Keys**: Instantly pull missing keys and their default values from your template into your active configuration with a single keystroke.
+- **Neovim Integration**: Comes with a built-in Neovim plugin for seamless in-editor configuration management.
 - **Docker Compose Integration**: Automatically generate `docker-compose.override.yml` from `docker-compose.yml`.
-- **Vim-inspired Workflow**: Navigate with `j`/`k`, edit with `i`, and save with `:w`.
-- **Modern UI**: A polished, rounded interface featuring the Catppuccin Mocha palette.
-- **Highly Configurable**: Customize keybindings and themes via a simple TOML configuration.
-- **Dynamic Alignment**: Automatically aligns keys and values for perfect vertical readability.
-- **Default Value Visibility**: Keep track of original template values while editing.
-- **Incremental Merging**: Load existing values from an output file to continue where you left off.
+- **Vim-inspired Workflow**: Navigate with `j`/`k`, `gg`/`G`, edit with `i`, search with `/`, and save with `:w`.
+- **Modern UI**: A polished, rounded interface featuring a semantic Catppuccin Mocha palette.
+- **Highly Configurable**: Customize keybindings and semantic themes via a simple TOML configuration.
 
 ## Installation
 
+### CLI Application
 Ensure you have Rust and Cargo installed, then run:
 
 ```sh
@@ -30,11 +31,21 @@ cd mould
 cargo build --release
 ```
 
-The binary will be installed as `mould`.
+### Neovim Plugin
+If you use a plugin manager like `lazy.nvim`, you can add the local repository (or remote once published) directly:
+
+```lua
+{
+  "username/mould", -- replace with actual repo path or github url
+  config = function()
+    -- Provides the :Mould command
+  end
+}
+```
 
 ## Usage
 
-Provide an input template file to start editing:
+Provide an input template file to start editing. `mould` is smart enough to figure out if it's looking at a template or an active file, and will search for its counterpart to provide diffing.
 
 ```sh
 mould .env.example
@@ -47,7 +58,10 @@ mould config.template.json -o config.json
 - **Normal Mode**
   - `j` / `Down`: Move selection down
   - `k` / `Up`: Move selection up
+  - `gg`: Jump to the top
+  - `G`: Jump to the bottom
   - `i`: Edit the value of the currently selected key (Enter Insert Mode)
+  - `a`: Add missing value from template to active config
   - `/`: Search for configuration keys (Jump to matches)
   - `n`: Jump to the next search match
   - `N`: Jump to the previous search match
@@ -75,21 +89,33 @@ edit = "i"
 save = ":w"
 quit = ":q"
 normal_mode = "Esc"
+search = "/"
+next_match = "n"
+previous_match = "N"
+jump_top = "gg"
+jump_bottom = "G"
 
 [theme]
 # Enable transparency to let your terminal background show through
 transparent = false
 
-# Custom color palette (Catppuccin Mocha defaults)
-crust = "#11111b"
-surface0 = "#313244"
-surface1 = "#45475a"
-text = "#cdd6f4"
-blue = "#89b4fa"
-green = "#a6e3a1"
-lavender = "#b4befe"
-mauve = "#cba6f7"
-peach = "#fab387"
+# Custom color palette (Semantic Catppuccin Mocha defaults)
+bg_normal = "#1e1e2e"
+bg_highlight = "#89b4fa"
+bg_active = "#a6e3a1"
+bg_search = "#cba6f7"
+fg_normal = "#cdd6f4"
+fg_dimmed = "#6c7086"
+fg_highlight = "#1e1e2e"
+fg_warning = "#f38ba8"
+fg_modified = "#fab387"
+fg_accent = "#b4befe"
+border_normal = "#45475a"
+border_active = "#a6e3a1"
+tree_depth_1 = "#b4befe"
+tree_depth_2 = "#cba6f7"
+tree_depth_3 = "#89b4fa"
+tree_depth_4 = "#fab387"
 ```
 
 ## License

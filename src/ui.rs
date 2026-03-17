@@ -16,7 +16,7 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
     // Render the main background (optional based on transparency config).
     if !theme.transparent {
         f.render_widget(
-            Block::default().style(Style::default().bg(theme.crust())),
+            Block::default().style(Style::default().bg(theme.bg_normal())),
             size,
         );
     }
@@ -53,76 +53,116 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
             let is_selected = i == app.selected;
             let is_match = matching_indices.contains(&i);
 
-            // Show live input text for the selected item if in Insert mode.
-            let val = if is_selected && matches!(app.mode, Mode::Insert) {
-                app.input.value()
+            // Indentation based on depth
+            let indent = "  ".repeat(var.depth);
+            let prefix = if var.is_group { "+ " } else { "  " };
+
+            // Determine colors based on depth
+            let depth_color = if is_selected {
+                theme.bg_normal()
             } else {
-                &var.value
+                match var.depth % 4 {
+                    0 => theme.tree_depth_1(),
+                    1 => theme.tree_depth_2(),
+                    2 => theme.tree_depth_3(),
+                    3 => theme.tree_depth_4(),
+                    _ => theme.fg_normal(),
+                }
+            };
+
+            // Determine colors based on status and selection
+            let text_color = if is_selected {
+                theme.fg_highlight()
+            } else {
+                match var.status {
+                    crate::format::ItemStatus::MissingFromActive if !var.is_group => theme.fg_dimmed(),
+                    crate::format::ItemStatus::Modified => theme.fg_modified(),
+                    _ => theme.fg_normal(),
+                }
             };
 
             let key_style = if is_selected {
                 Style::default()
-                    .fg(theme.crust())
+                    .fg(theme.fg_highlight())
                     .add_modifier(Modifier::BOLD)
             } else if is_match {
                 Style::default()
-                    .fg(theme.mauve())
+                    .fg(theme.bg_search())
                     .add_modifier(Modifier::UNDERLINED)
+            } else if var.status == crate::format::ItemStatus::MissingFromActive && !var.is_group {
+                Style::default()
+                    .fg(theme.fg_dimmed())
+                    .add_modifier(Modifier::DIM)
             } else {
-                Style::default().fg(theme.lavender())
+                Style::default().fg(depth_color)
             };
 
-            let value_style = if is_selected {
-                Style::default().fg(theme.crust())
-            } else {
-                Style::default().fg(theme.text())
-            };
+            let mut key_spans = vec![
+                Span::raw(indent),
+                Span::styled(prefix, Style::default().fg(theme.border_normal())),
+                Span::styled(&var.key, key_style),
+            ];
 
-            // Path styling for nested keys (e.g., a.b.c)
-            let mut key_spans = Vec::new();
-            if let Some(last_dot) = var.key.rfind('.') {
-                let path = &var.key[..=last_dot];
-                let key = &var.key[last_dot + 1..];
-
-                let path_style = if is_selected {
-                    Style::default()
-                        .fg(theme.crust())
-                        .add_modifier(Modifier::DIM)
-                } else {
-                    Style::default().fg(theme.surface1())
-                };
-
-                key_spans.push(Span::styled(path, path_style));
-                key_spans.push(Span::styled(key, key_style));
-            } else {
-                key_spans.push(Span::styled(&var.key, key_style));
+            // Add status indicator if not present (only for leaf variables)
+            if !var.is_group {
+                match var.status {
+                    crate::format::ItemStatus::MissingFromActive => {
+                        let missing_style = if is_selected {
+                            Style::default().fg(theme.fg_highlight()).add_modifier(Modifier::BOLD)
+                        } else {
+                            Style::default().fg(theme.fg_warning()).add_modifier(Modifier::BOLD)
+                        };
+                        key_spans.push(Span::styled(" (missing)", missing_style));
+                    }
+                    crate::format::ItemStatus::Modified => {
+                        if !is_selected {
+                            key_spans.push(Span::styled(" (*)", Style::default().fg(theme.fg_modified())));
+                        }
+                    }
+                    _ => {}
+                }
             }
 
             let item_style = if is_selected {
-                Style::default().bg(theme.blue())
+                Style::default().bg(theme.bg_highlight())
             } else {
-                Style::default().fg(theme.text())
+                Style::default().fg(text_color)
             };
 
-            // Two-line layout for better readability:
-            // Line 1: Key (path.key)
-            // Line 2: Value
-            let lines = vec![
-                Line::from(key_spans),
-                Line::from(vec![
-                    Span::styled(
-                        "  └─ ",
-                        if is_selected {
-                            Style::default().fg(theme.crust())
-                        } else {
-                            Style::default().fg(theme.surface1())
-                        },
-                    ),
-                    Span::styled(val, value_style),
-                ]),
-            ];
+            if var.is_group {
+                ListItem::new(Line::from(key_spans)).style(item_style)
+            } else {
+                // Show live input text for the selected item if in Insert mode.
+                let val = if is_selected && matches!(app.mode, Mode::Insert) {
+                    app.input.value()
+                } else {
+                    var.value.as_deref().unwrap_or("")
+                };
 
-            ListItem::new(lines).style(item_style)
+                let value_style = if is_selected {
+                    Style::default().fg(theme.fg_highlight())
+                } else {
+                    Style::default().fg(theme.fg_normal())
+                };
+
+                let mut val_spans = vec![
+                    Span::raw(format!("{}    └─ ", "  ".repeat(var.depth))),
+                    Span::styled(val, value_style),
+                ];
+
+                if let Some(t_val) = &var.template_value {
+                    if Some(t_val) != var.value.as_ref() {
+                        let t_style = if is_selected {
+                            Style::default().fg(theme.bg_normal()).add_modifier(Modifier::DIM)
+                        } else {
+                            Style::default().fg(theme.fg_dimmed()).add_modifier(Modifier::ITALIC)
+                        };
+                        val_spans.push(Span::styled(format!(" [Def: {}]", t_val), t_style));
+                    }
+                }
+
+                ListItem::new(vec![Line::from(key_spans), Line::from(val_spans)]).style(item_style)
+            }
         })
         .collect();
 
@@ -133,10 +173,10 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
             .title(" Config Variables ")
             .title_style(
                 Style::default()
-                    .fg(theme.mauve())
+                    .fg(theme.fg_accent())
                     .add_modifier(Modifier::BOLD),
             )
-            .border_style(Style::default().fg(theme.surface1())),
+            .border_style(Style::default().fg(theme.border_normal())),
     );
 
     let mut state = ListState::default();
@@ -145,26 +185,43 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
 
     // Render the focused input area.
     let current_var = app.vars.get(app.selected);
-    let input_title = if let Some(var) = current_var {
-        if var.default_value.is_empty() {
-            format!(" Editing: {} ", var.key)
+    let mut input_title = " Input ".to_string();
+    let mut extra_info = String::new();
+
+    if let Some(var) = current_var {
+        if var.is_group {
+            input_title = format!(" Group: {} ", var.path);
         } else {
-            format!(" Editing: {} (Default: {}) ", var.key, var.default_value)
+            input_title = format!(" Editing: {} ", var.path);
+            if let Some(t_val) = &var.template_value {
+                extra_info = format!("  [Template: {}]", t_val);
+            }
         }
-    } else {
-        " Input ".to_string()
-    };
+    }
 
     let input_border_color = match app.mode {
-        Mode::Insert => theme.green(),
-        Mode::Normal | Mode::Search => theme.surface1(),
+        Mode::Insert => theme.border_active(),
+        Mode::Normal | Mode::Search => theme.border_normal(),
     };
 
     let input_text = app.input.value();
     let cursor_pos = app.input.visual_cursor();
 
-    let input = Paragraph::new(input_text)
-        .style(Style::default().fg(theme.text()))
+    // Show template value in normal mode if it differs
+    let display_text = if let Some(var) = current_var {
+        if var.is_group {
+            "<group>".to_string()
+        } else if matches!(app.mode, Mode::Normal) {
+            format!("{}{}", input_text, extra_info)
+        } else {
+            input_text.to_string()
+        }
+    } else {
+        input_text.to_string()
+    };
+
+    let input = Paragraph::new(display_text)
+        .style(Style::default().fg(theme.fg_normal()))
         .block(
             Block::default()
                 .borders(Borders::ALL)
@@ -172,7 +229,7 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
                 .title(input_title)
                 .title_style(
                     Style::default()
-                        .fg(theme.peach())
+                        .fg(theme.fg_accent()) // Make title pop
                         .add_modifier(Modifier::BOLD),
                 )
                 .border_style(Style::default().fg(input_border_color)),
@@ -192,22 +249,22 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
         Mode::Normal => (
             " NORMAL ",
             Style::default()
-                .bg(theme.blue())
-                .fg(theme.crust())
+                .bg(theme.bg_highlight())
+                .fg(theme.bg_normal())
                 .add_modifier(Modifier::BOLD),
         ),
         Mode::Insert => (
             " INSERT ",
             Style::default()
-                .bg(theme.green())
-                .fg(theme.crust())
+                .bg(theme.bg_active())
+                .fg(theme.bg_normal())
                 .add_modifier(Modifier::BOLD),
         ),
         Mode::Search => (
             " SEARCH ",
             Style::default()
-                .bg(theme.mauve())
-                .fg(theme.crust())
+                .bg(theme.bg_search())
+                .fg(theme.bg_normal())
                 .add_modifier(Modifier::BOLD),
         ),
     };
@@ -225,10 +282,10 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
         Span::styled(mode_str, mode_style),
         Span::styled(
             format!(" {} ", status_msg),
-            Style::default().bg(theme.surface0()).fg(theme.text()),
+            Style::default().bg(theme.border_normal()).fg(theme.fg_normal()),
         ),
     ]);
 
-    let status = Paragraph::new(status_line).style(Style::default().bg(theme.surface0()));
+    let status = Paragraph::new(status_line).style(Style::default().bg(theme.border_normal()));
     f.render_widget(status, chunks[4]);
 }

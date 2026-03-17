@@ -1,4 +1,4 @@
-use super::{EnvVar, FormatHandler, FormatType};
+use super::{ConfigItem, FormatHandler, FormatType, ItemStatus};
 use serde_json::{Map, Value};
 use std::fs;
 use std::io;
@@ -53,87 +53,160 @@ impl HierarchicalHandler {
     }
 }
 
-fn flatten(value: &Value, prefix: &str, vars: &mut Vec<EnvVar>) {
+fn flatten(value: &Value, prefix: &str, depth: usize, key_name: &str, vars: &mut Vec<ConfigItem>) {
+    let path = if prefix.is_empty() {
+        key_name.to_string()
+    } else if key_name.is_empty() {
+        prefix.to_string()
+    } else {
+        format!("{}.{}", prefix, key_name)
+    };
+
     match value {
         Value::Object(map) => {
+            if !path.is_empty() {
+                vars.push(ConfigItem {
+                    key: key_name.to_string(),
+                    path: path.clone(),
+                    value: None,
+                    template_value: None,
+                    default_value: None,
+                    depth,
+                    is_group: true,
+                    status: ItemStatus::Present,
+                });
+            }
+            let next_depth = if path.is_empty() { depth } else { depth + 1 };
             for (k, v) in map {
-                let new_prefix = if prefix.is_empty() {
-                    k.clone()
-                } else {
-                    format!("{}.{}", prefix, k)
-                };
-                flatten(v, &new_prefix, vars);
+                flatten(v, &path, next_depth, k, vars);
             }
         }
         Value::Array(arr) => {
+            if !path.is_empty() {
+                vars.push(ConfigItem {
+                    key: key_name.to_string(),
+                    path: path.clone(),
+                    value: None,
+                    template_value: None,
+                    default_value: None,
+                    depth,
+                    is_group: true,
+                    status: ItemStatus::Present,
+                });
+            }
+            let next_depth = if path.is_empty() { depth } else { depth + 1 };
             for (i, v) in arr.iter().enumerate() {
-                let new_prefix = format!("{}[{}]", prefix, i);
-                flatten(v, &new_prefix, vars);
+                let array_key = format!("[{}]", i);
+                flatten(v, &path, next_depth, &array_key, vars);
             }
         }
         Value::String(s) => {
-            vars.push(EnvVar {
-                key: prefix.to_string(),
-                value: s.clone(),
-                default_value: s.clone(),
+            vars.push(ConfigItem {
+                key: key_name.to_string(),
+                path: path.clone(),
+                value: Some(s.clone()),
+                template_value: Some(s.clone()),
+                default_value: Some(s.clone()),
+                depth,
+                is_group: false,
+                status: ItemStatus::Present,
             });
         }
         Value::Number(n) => {
             let s = n.to_string();
-            vars.push(EnvVar {
-                key: prefix.to_string(),
-                value: s.clone(),
-                default_value: s.clone(),
+            vars.push(ConfigItem {
+                key: key_name.to_string(),
+                path: path.clone(),
+                value: Some(s.clone()),
+                template_value: Some(s.clone()),
+                default_value: Some(s.clone()),
+                depth,
+                is_group: false,
+                status: ItemStatus::Present,
             });
         }
         Value::Bool(b) => {
             let s = b.to_string();
-            vars.push(EnvVar {
-                key: prefix.to_string(),
-                value: s.clone(),
-                default_value: s.clone(),
+            vars.push(ConfigItem {
+                key: key_name.to_string(),
+                path: path.clone(),
+                value: Some(s.clone()),
+                template_value: Some(s.clone()),
+                default_value: Some(s.clone()),
+                depth,
+                is_group: false,
+                status: ItemStatus::Present,
             });
         }
         Value::Null => {
-            vars.push(EnvVar {
-                key: prefix.to_string(),
-                value: "".to_string(),
-                default_value: "".to_string(),
+            vars.push(ConfigItem {
+                key: key_name.to_string(),
+                path: path.clone(),
+                value: Some("".to_string()),
+                template_value: Some("".to_string()),
+                default_value: Some("".to_string()),
+                depth,
+                is_group: false,
+                status: ItemStatus::Present,
             });
         }
     }
 }
 
-// Removed unused update_leaf and update_leaf_value functions
-
 impl FormatHandler for HierarchicalHandler {
-    fn parse(&self, path: &Path) -> io::Result<Vec<EnvVar>> {
+    fn parse(&self, path: &Path) -> io::Result<Vec<ConfigItem>> {
         let value = self.read_value(path)?;
         let mut vars = Vec::new();
-        flatten(&value, "", &mut vars);
+        flatten(&value, "", 0, "", &mut vars);
         Ok(vars)
     }
 
-    fn merge(&self, path: &Path, vars: &mut Vec<EnvVar>) -> io::Result<()> {
+    fn merge(&self, path: &Path, vars: &mut Vec<ConfigItem>) -> io::Result<()> {
         if !path.exists() {
             return Ok(());
         }
         let existing_value = self.read_value(path)?;
         let mut existing_vars = Vec::new();
-        flatten(&existing_value, "", &mut existing_vars);
+        flatten(&existing_value, "", 0, "", &mut existing_vars);
 
         for var in vars.iter_mut() {
-            if let Some(existing) = existing_vars.iter().find(|v| v.key == var.key) {
-                var.value = existing.value.clone();
+            if let Some(existing) = existing_vars.iter().find(|v| v.path == var.path) {
+                if var.value != existing.value {
+                    var.value = existing.value.clone();
+                    var.status = ItemStatus::Modified;
+                }
+            } else {
+                var.status = ItemStatus::MissingFromActive;
             }
         }
+        
+        // Find keys in active that are not in template
+        let mut to_add = Vec::new();
+        for existing in existing_vars {
+            if !vars.iter().any(|v| v.path == existing.path) {
+                let mut new_item = existing.clone();
+                new_item.status = ItemStatus::MissingFromTemplate;
+                new_item.template_value = None;
+                new_item.default_value = None;
+                to_add.push(new_item);
+            }
+        }
+        
+        // Basic insertion logic for extra keys (could be improved to insert at correct depth/position)
+        vars.extend(to_add);
+
         Ok(())
     }
 
-    fn write(&self, path: &Path, vars: &[EnvVar]) -> io::Result<()> {
+    fn write(&self, path: &Path, vars: &[ConfigItem]) -> io::Result<()> {
         let mut root = Value::Object(Map::new());
         for var in vars {
-            insert_into_value(&mut root, &var.key, &var.value);
+            if !var.is_group {
+                let val = var.value.as_deref()
+                    .or(var.template_value.as_deref())
+                    .unwrap_or("");
+                insert_into_value(&mut root, &var.path, val);
+            }
         }
         self.write_value(path, &root)
     }
