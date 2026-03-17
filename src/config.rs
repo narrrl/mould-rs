@@ -4,9 +4,9 @@ use std::fs;
 
 /// Configuration for the application's appearance.
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(default)]
 pub struct ThemeConfig {
     /// If true, skip rendering the background block to let the terminal's transparency show.
-    #[serde(default)]
     pub transparent: bool,
     /// Color for standard background areas (when not transparent).
     pub crust: String,
@@ -91,6 +91,7 @@ impl Default for ThemeConfig {
 
 /// Custom keybindings for navigation and application control.
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(default)]
 pub struct KeybindsConfig {
     pub down: String,
     pub up: String,
