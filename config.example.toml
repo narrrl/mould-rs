@@ -9,15 +9,16 @@ transparent = false
 # Colors are specified in hex format ("#RRGGBB").
 # Default values follow the Semantic Catppuccin Mocha palette.
 
-bg_normal = "#11111b"
+bg_normal = "#1e1e2e"
 bg_highlight = "#89b4fa"
 bg_active = "#a6e3a1"
 bg_search = "#cba6f7"
 fg_normal = "#cdd6f4"
-fg_dimmed = "#a6adc8"
-fg_highlight = "#11111b"
+fg_dimmed = "#6c7086"
+fg_highlight = "#1e1e2e"
 fg_warning = "#f38ba8"
 fg_modified = "#fab387"
+fg_accent = "#b4befe"
 border_normal = "#45475a"
 border_active = "#a6e3a1"
 tree_depth_1 = "#b4befe"
