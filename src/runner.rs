@@ -121,6 +121,7 @@ where
                 self.app.running = false;
             } else if c_str == self.config.keybinds.search {
                 self.app.mode = Mode::Search;
+                self.app.search_query.clear();
                 self.app.status_message = Some(format!("{} ", self.config.keybinds.search));
             } else if c_str == self.config.keybinds.next_match {
                 self.app.jump_next_match();
