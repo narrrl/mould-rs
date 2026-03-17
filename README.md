@@ -32,15 +32,13 @@ cargo build --release
 ```
 
 ### Neovim Plugin
-If you use a plugin manager like `lazy.nvim`, you can add the local repository (or remote once published) directly:
+If you use a plugin manager like `mini.deps`, you can add the repository directly:
 
 ```lua
-{
-  "username/mould", -- replace with actual repo path or github url
-  config = function()
-    -- Provides the :Mould command
-  end
-}
+add({
+	source = 'https://git.narl.io/nvrl/mould-rs',
+	checkout = 'main',
+})
 ```
 
 ## Usage
