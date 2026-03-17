@@ -122,6 +122,8 @@ where
                 (&self.config.keybinds.previous_match, "previous_match"),
                 (&self.config.keybinds.jump_top, "jump_top"),
                 (&self.config.keybinds.jump_bottom, "jump_bottom"),
+                (&self.config.keybinds.append_item, "append_item"),
+                (&self.config.keybinds.prepend_item, "prepend_item"),
                 (&"a".to_string(), "add_missing"),
                 (&":".to_string(), "command"),
                 (&"q".to_string(), "quit"),
@@ -154,6 +156,8 @@ where
                     "previous_match" => self.app.jump_previous_match(),
                     "jump_top" => self.app.jump_top(),
                     "jump_bottom" => self.app.jump_bottom(),
+                    "append_item" => self.app.add_array_item(true),
+                    "prepend_item" => self.app.add_array_item(false),
                     "add_missing" => self.add_missing_item(),
                     "command" => {
                         self.command_buffer.push(':');

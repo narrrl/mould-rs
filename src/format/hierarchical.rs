@@ -1,4 +1,4 @@
-use super::{ConfigItem, FormatHandler, FormatType, ItemStatus};
+use super::{ConfigItem, FormatHandler, FormatType, ItemStatus, ValueType};
 use serde_json::{Map, Value};
 use std::fs;
 use std::io;
@@ -58,6 +58,8 @@ fn flatten(value: &Value, prefix: &str, depth: usize, key_name: &str, vars: &mut
         key_name.to_string()
     } else if key_name.is_empty() {
         prefix.to_string()
+    } else if key_name.starts_with('[') {
+        format!("{}{}", prefix, key_name)
     } else {
         format!("{}.{}", prefix, key_name)
     };
@@ -74,6 +76,7 @@ fn flatten(value: &Value, prefix: &str, depth: usize, key_name: &str, vars: &mut
                     depth,
                     is_group: true,
                     status: ItemStatus::Present,
+                    value_type: ValueType::Null,
                 });
             }
             let next_depth = if path.is_empty() { depth } else { depth + 1 };
@@ -92,6 +95,7 @@ fn flatten(value: &Value, prefix: &str, depth: usize, key_name: &str, vars: &mut
                     depth,
                     is_group: true,
                     status: ItemStatus::Present,
+                    value_type: ValueType::Null,
                 });
             }
             let next_depth = if path.is_empty() { depth } else { depth + 1 };
@@ -110,6 +114,7 @@ fn flatten(value: &Value, prefix: &str, depth: usize, key_name: &str, vars: &mut
                 depth,
                 is_group: false,
                 status: ItemStatus::Present,
+                value_type: ValueType::String,
             });
         }
         Value::Number(n) => {
@@ -123,6 +128,7 @@ fn flatten(value: &Value, prefix: &str, depth: usize, key_name: &str, vars: &mut
                 depth,
                 is_group: false,
                 status: ItemStatus::Present,
+                value_type: ValueType::Number,
             });
         }
         Value::Bool(b) => {
@@ -136,6 +142,7 @@ fn flatten(value: &Value, prefix: &str, depth: usize, key_name: &str, vars: &mut
                 depth,
                 is_group: false,
                 status: ItemStatus::Present,
+                value_type: ValueType::Bool,
             });
         }
         Value::Null => {
@@ -148,6 +155,7 @@ fn flatten(value: &Value, prefix: &str, depth: usize, key_name: &str, vars: &mut
                 depth,
                 is_group: false,
                 status: ItemStatus::Present,
+                value_type: ValueType::Null,
             });
         }
     }
@@ -205,14 +213,14 @@ impl FormatHandler for HierarchicalHandler {
                 let val = var.value.as_deref()
                     .or(var.template_value.as_deref())
                     .unwrap_or("");
-                insert_into_value(&mut root, &var.path, val);
+                insert_into_value(&mut root, &var.path, val, var.value_type);
             }
         }
         self.write_value(path, &root)
     }
 }
 
-fn insert_into_value(root: &mut Value, path: &str, new_val_str: &str) {
+fn insert_into_value(root: &mut Value, path: &str, new_val_str: &str, value_type: ValueType) {
     let mut parts = path.split('.');
     let last_part = match parts.next_back() {
         Some(p) => p,
@@ -255,13 +263,30 @@ fn insert_into_value(root: &mut Value, path: &str, new_val_str: &str) {
     }
     let map = current.as_object_mut().unwrap();
 
-    // Attempt basic type inference
-    let final_val = if let Ok(n) = new_val_str.parse::<i64>() {
-        Value::Number(n.into())
-    } else if let Ok(b) = new_val_str.parse::<bool>() {
-        Value::Bool(b)
-    } else {
-        Value::String(new_val_str.to_string())
+    // Use the preserved ValueType instead of aggressive inference
+    let final_val = match value_type {
+        ValueType::Number => {
+            if let Ok(n) = new_val_str.parse::<i64>() {
+                Value::Number(n.into())
+            } else if let Ok(f) = new_val_str.parse::<f64>() {
+                if let Some(n) = serde_json::Number::from_f64(f) {
+                    Value::Number(n)
+                } else {
+                    Value::String(new_val_str.to_string())
+                }
+            } else {
+                Value::String(new_val_str.to_string())
+            }
+        }
+        ValueType::Bool => {
+            if let Ok(b) = new_val_str.parse::<bool>() {
+                Value::Bool(b)
+            } else {
+                Value::String(new_val_str.to_string())
+            }
+        }
+        ValueType::Null if new_val_str.is_empty() => Value::Null,
+        _ => Value::String(new_val_str.to_string()),
     };
 
     if let Some(i) = final_idx {
@@ -316,7 +341,7 @@ mod tests {
         let mut root = Value::Object(Map::new());
         for var in vars {
             if !var.is_group {
-                insert_into_value(&mut root, &var.path, var.value.as_deref().unwrap_or(""));
+                insert_into_value(&mut root, &var.path, var.value.as_deref().unwrap_or(""), var.value_type);
             }
         }
 

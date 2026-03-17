@@ -1,4 +1,4 @@
-use super::{ConfigItem, FormatHandler, ItemStatus};
+use super::{ConfigItem, FormatHandler, ItemStatus, ValueType};
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
@@ -27,6 +27,7 @@ impl FormatHandler for EnvHandler {
                     depth: 0,
                     is_group: false,
                     status: ItemStatus::Present,
+                    value_type: ValueType::String,
                 });
             }
         }
@@ -65,6 +66,7 @@ impl FormatHandler for EnvHandler {
                         depth: 0,
                         is_group: false,
                         status: ItemStatus::MissingFromTemplate,
+                        value_type: ValueType::String,
                     });
                 }
             }
@@ -159,6 +161,7 @@ mod tests {
             depth: 0,
             is_group: false,
             status: ItemStatus::Present,
+            value_type: ValueType::String,
         }];
 
         let handler = EnvHandler;

@@ -61,6 +61,8 @@ mould config.template.json -o config.json
   - `gg`: Jump to the top
   - `G`: Jump to the bottom
   - `i`: Edit the value of the currently selected key (Enter Insert Mode)
+  - `o`: Append a new item to the current array
+  - `O`: Prepend a new item to the current array
   - `a`: Add missing value from template to active config
   - `/`: Search for configuration keys (Jump to matches)
   - `n`: Jump to the next search match

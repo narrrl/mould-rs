@@ -12,6 +12,14 @@ pub enum ItemStatus {
     Modified,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ValueType {
+    String,
+    Number,
+    Bool,
+    Null,
+}
+
 #[derive(Debug, Clone)]
 pub struct ConfigItem {
     pub key: String,
@@ -22,6 +30,7 @@ pub struct ConfigItem {
     pub depth: usize,
     pub is_group: bool,
     pub status: ItemStatus,
+    pub value_type: ValueType,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

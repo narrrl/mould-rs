@@ -164,4 +164,75 @@ impl App {
         self.commit_input();
         self.mode = Mode::Normal;
     }
+
+    /// Adds a new item to an array if the selected item is part of one.
+    pub fn add_array_item(&mut self, after: bool) {
+        if self.vars.is_empty() {
+            return;
+        }
+
+        let (base, idx, depth) = {
+            let selected_item = &self.vars[self.selected];
+            if selected_item.is_group {
+                return;
+            }
+            let path = &selected_item.path;
+            if let Some((base, idx)) = parse_index(path) {
+                (base.to_string(), idx, selected_item.depth)
+            } else {
+                return;
+            }
+        };
+
+        let new_idx = if after { idx + 1 } else { idx };
+        let insert_pos = if after {
+            self.selected + 1
+        } else {
+            self.selected
+        };
+
+        // 1. Shift all items in this array that have index >= new_idx
+        for var in self.vars.iter_mut() {
+            if var.path.starts_with(&base) {
+                if let Some((b, i)) = parse_index(&var.path) {
+                    if b == base && i >= new_idx {
+                        var.path = format!("{}[{}]", base, i + 1);
+                        // Also update key if it was just the index
+                        if var.key == format!("[{}]", i) {
+                            var.key = format!("[{}]", i + 1);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Insert new item
+        let new_item = ConfigItem {
+            key: format!("[{}]", new_idx),
+            path: format!("{}[{}]", base, new_idx),
+            value: Some("".to_string()),
+            template_value: None,
+            default_value: None,
+            depth,
+            is_group: false,
+            status: crate::format::ItemStatus::Modified,
+            value_type: crate::format::ValueType::String,
+        };
+        self.vars.insert(insert_pos, new_item);
+        self.selected = insert_pos;
+        self.sync_input_with_selected();
+        self.mode = Mode::Insert;
+        self.status_message = None;
+    }
+}
+
+fn parse_index(path: &str) -> Option<(&str, usize)> {
+    if path.ends_with(']') {
+        if let Some(start) = path.rfind('[') {
+            if let Ok(idx) = path[start + 1..path.len() - 1].parse::<usize>() {
+                return Some((&path[..start], idx));
+            }
+        }
+    }
+    None
 }

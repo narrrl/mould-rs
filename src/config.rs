@@ -114,6 +114,8 @@ pub struct KeybindsConfig {
     pub previous_match: String,
     pub jump_top: String,
     pub jump_bottom: String,
+    pub append_item: String,
+    pub prepend_item: String,
 }
 
 impl Default for KeybindsConfig {
@@ -130,6 +132,8 @@ impl Default for KeybindsConfig {
             previous_match: "N".to_string(),
             jump_top: "gg".to_string(),
             jump_bottom: "G".to_string(),
+            append_item: "o".to_string(),
+            prepend_item: "O".to_string(),
         }
     }
 }
