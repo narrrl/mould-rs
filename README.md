@@ -48,6 +48,9 @@ mould config.template.json -o config.json
   - `j` / `Down`: Move selection down
   - `k` / `Up`: Move selection up
   - `i`: Edit the value of the currently selected key (Enter Insert Mode)
+  - `/`: Search for configuration keys (Jump to matches)
+  - `n`: Jump to the next search match
+  - `N`: Jump to the previous search match
   - `:w` or `Enter`: Save the current configuration to the output file
   - `:q` or `q`: Quit the application
   - `:wq`: Save and quit

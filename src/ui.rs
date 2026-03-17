@@ -44,12 +44,14 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
         .split(outer_layout[1]);
 
     // Build the interactive list of configuration variables.
+    let matching_indices = app.matching_indices();
     let items: Vec<ListItem> = app
         .vars
         .iter()
         .enumerate()
         .map(|(i, var)| {
             let is_selected = i == app.selected;
+            let is_match = matching_indices.contains(&i);
 
             // Show live input text for the selected item if in Insert mode.
             let val = if is_selected && matches!(app.mode, Mode::Insert) {
@@ -62,6 +64,10 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
                 Style::default()
                     .fg(theme.crust())
                     .add_modifier(Modifier::BOLD)
+            } else if is_match {
+                Style::default()
+                    .fg(theme.mauve())
+                    .add_modifier(Modifier::UNDERLINED)
             } else {
                 Style::default().fg(theme.lavender())
             };
@@ -151,7 +157,7 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
 
     let input_border_color = match app.mode {
         Mode::Insert => theme.green(),
-        Mode::Normal => theme.surface1(),
+        Mode::Normal | Mode::Search => theme.surface1(),
     };
 
     let input_text = app.input.value();
@@ -197,14 +203,22 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
                 .fg(theme.crust())
                 .add_modifier(Modifier::BOLD),
         ),
+        Mode::Search => (
+            " SEARCH ",
+            Style::default()
+                .bg(theme.mauve())
+                .fg(theme.crust())
+                .add_modifier(Modifier::BOLD),
+        ),
     };
 
     let status_msg = app
         .status_message
         .as_deref()
         .unwrap_or_else(|| match app.mode {
-            Mode::Normal => " navigation | i: edit | :w: save | :q: quit ",
+            Mode::Normal => " navigation | i: edit | /: search | :w: save | :q: quit ",
             Mode::Insert => " Esc: back to normal | Enter: commit ",
+            Mode::Search => " Esc: back to normal | type to filter ",
         });
 
     let status_line = Line::from(vec![

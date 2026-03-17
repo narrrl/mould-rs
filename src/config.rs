@@ -98,6 +98,9 @@ pub struct KeybindsConfig {
     pub save: String,
     pub quit: String,
     pub normal_mode: String,
+    pub search: String,
+    pub next_match: String,
+    pub previous_match: String,
 }
 
 impl Default for KeybindsConfig {
@@ -109,6 +112,9 @@ impl Default for KeybindsConfig {
             save: ":w".to_string(),
             quit: ":q".to_string(),
             normal_mode: "Esc".to_string(),
+            search: "/".to_string(),
+            next_match: "n".to_string(),
+            previous_match: "N".to_string(),
         }
     }
 }
