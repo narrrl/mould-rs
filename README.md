@@ -32,15 +32,13 @@ cargo build --release
 ```
 
 ### Neovim Plugin
-If you use a plugin manager like `lazy.nvim`, you can add the local repository (or remote once published) directly:
+If you use a plugin manager like `mini.deps`, you can add the repository directly:
 
 ```lua
-{
-  "username/mould", -- replace with actual repo path or github url
-  config = function()
-    -- Provides the :Mould command
-  end
-}
+add({
+	source = 'https://git.narl.io/nvrl/mould-rs',
+	checkout = 'main',
+})
 ```
 
 ## Usage
@@ -60,7 +58,13 @@ mould config.template.json -o config.json
   - `k` / `Up`: Move selection up
   - `gg`: Jump to the top
   - `G`: Jump to the bottom
-  - `i`: Edit the value of the currently selected key (Enter Insert Mode)
+  - `i`: Edit value (cursor at start)
+  - `A`: Edit value (cursor at end)
+  - `S`: Substitute value (clear and edit)
+  - `o`: Append a new item to the current array
+  - `O`: Prepend a new item to the current array
+  - `dd`: Delete the currently selected variable or group
+  - `u`: Undo the last change
   - `a`: Add missing value from template to active config
   - `/`: Search for configuration keys (Jump to matches)
   - `n`: Jump to the next search match

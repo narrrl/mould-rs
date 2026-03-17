@@ -1,4 +1,4 @@
-use crate::app::{App, Mode};
+use crate::app::{App, InsertVariant, Mode};
 use crate::config::Config;
 use crate::format::FormatHandler;
 use crossterm::event::{self, Event, KeyCode, KeyEvent};
@@ -117,11 +117,17 @@ where
                 (&self.config.keybinds.down, "down"),
                 (&self.config.keybinds.up, "up"),
                 (&self.config.keybinds.edit, "edit"),
+                (&self.config.keybinds.edit_append, "edit_append"),
+                (&self.config.keybinds.edit_substitute, "edit_substitute"),
                 (&self.config.keybinds.search, "search"),
                 (&self.config.keybinds.next_match, "next_match"),
                 (&self.config.keybinds.previous_match, "previous_match"),
                 (&self.config.keybinds.jump_top, "jump_top"),
                 (&self.config.keybinds.jump_bottom, "jump_bottom"),
+                (&self.config.keybinds.append_item, "append_item"),
+                (&self.config.keybinds.prepend_item, "prepend_item"),
+                (&self.config.keybinds.delete_item, "delete_item"),
+                (&self.config.keybinds.undo, "undo"),
                 (&"a".to_string(), "add_missing"),
                 (&":".to_string(), "command"),
                 (&"q".to_string(), "quit"),
@@ -144,7 +150,9 @@ where
                 match action {
                     "down" => self.app.next(),
                     "up" => self.app.previous(),
-                    "edit" => self.app.enter_insert(),
+                    "edit" => self.app.enter_insert(InsertVariant::Start),
+                    "edit_append" => self.app.enter_insert(InsertVariant::End),
+                    "edit_substitute" => self.app.enter_insert(InsertVariant::Substitute),
                     "search" => {
                         self.app.mode = Mode::Search;
                         self.app.search_query.clear();
@@ -154,7 +162,14 @@ where
                     "previous_match" => self.app.jump_previous_match(),
                     "jump_top" => self.app.jump_top(),
                     "jump_bottom" => self.app.jump_bottom(),
-                    "add_missing" => self.add_missing_item(),
+                    "append_item" => self.app.add_array_item(true),
+                    "prepend_item" => self.app.add_array_item(false),
+                    "delete_item" => self.app.delete_selected(),
+                    "undo" => self.app.undo(),
+                    "add_missing" => {
+                        self.app.save_undo_state();
+                        self.add_missing_item();
+                    }
                     "command" => {
                         self.command_buffer.push(':');
                         self.sync_command_status();

@@ -1,9 +1,3 @@
-[package]
-edition = "2024"
-name = "mould"
-version = "0.4.0"
-authors = ["Nils Pukropp <nils@narl.io>"]
-
 [[bin]]
 name = "mould"
 path = "src/main.rs"
@@ -22,12 +16,18 @@ toml = "1.0.6"
 tui-input = "0.15.0"
 
 [dependencies.clap]
-version = "4.6.0"
 features = ["derive"]
+version = "4.6.0"
 
 [dependencies.serde]
-version = "1.0.228"
 features = ["derive"]
+version = "1.0.228"
 
 [dev-dependencies]
 tempfile = "3.27.0"
+
+[package]
+authors = ["Nils Pukropp <nils@narl.io>"]
+edition = "2024"
+name = "mould"
+version = "0.4.2"

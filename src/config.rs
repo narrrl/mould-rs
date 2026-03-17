@@ -106,6 +106,8 @@ pub struct KeybindsConfig {
     pub down: String,
     pub up: String,
     pub edit: String,
+    pub edit_append: String,
+    pub edit_substitute: String,
     pub save: String,
     pub quit: String,
     pub normal_mode: String,
@@ -114,6 +116,10 @@ pub struct KeybindsConfig {
     pub previous_match: String,
     pub jump_top: String,
     pub jump_bottom: String,
+    pub append_item: String,
+    pub prepend_item: String,
+    pub delete_item: String,
+    pub undo: String,
 }
 
 impl Default for KeybindsConfig {
@@ -122,6 +128,8 @@ impl Default for KeybindsConfig {
             down: "j".to_string(),
             up: "k".to_string(),
             edit: "i".to_string(),
+            edit_append: "A".to_string(),
+            edit_substitute: "S".to_string(),
             save: ":w".to_string(),
             quit: ":q".to_string(),
             normal_mode: "Esc".to_string(),
@@ -130,6 +138,10 @@ impl Default for KeybindsConfig {
             previous_match: "N".to_string(),
             jump_top: "gg".to_string(),
             jump_bottom: "G".to_string(),
+            append_item: "o".to_string(),
+            prepend_item: "O".to_string(),
+            delete_item: "dd".to_string(),
+            undo: "u".to_string(),
         }
     }
 }
