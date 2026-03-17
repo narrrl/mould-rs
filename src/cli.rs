@@ -12,8 +12,8 @@ use std::path::PathBuf;
 )]
 pub struct Cli {
     /// The input template file (e.g., .env.example, config.json.template, docker-compose.yml)
-    #[arg(required = true, value_name = "INPUT_FILE")]
-    pub input: PathBuf,
+    #[arg(required = false, value_name = "INPUT_FILE")]
+    pub input: Option<PathBuf>,
 
     /// Optional output file. If not provided, it will be inferred.
     #[arg(short, long, value_name = "OUTPUT_FILE")]

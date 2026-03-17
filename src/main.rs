@@ -26,7 +26,8 @@ use ratatui::{Terminal, backend::CrosstermBackend};
 fn determine_output_path(input: &Path) -> PathBuf {
     let file_name = input.file_name().unwrap_or_default().to_string_lossy();
 
-    if file_name == ".env.example" {
+    // Standard mappings
+    if file_name == ".env.example" || file_name == ".env.template" {
         return input.with_file_name(".env");
     }
 
@@ -37,17 +38,96 @@ fn determine_output_path(input: &Path) -> PathBuf {
         return input.with_file_name("compose.override.yaml");
     }
 
-    if file_name.ends_with(".example.json") {
-        return input.with_file_name(file_name.replace(".example.json", ".json"));
+    // Pattern-based mappings
+    if let Some(base) = file_name.strip_suffix(".env.example") {
+        return input.with_file_name(format!("{}.env", base));
     }
-    if file_name.ends_with(".template.json") {
-        return input.with_file_name(file_name.replace(".template.json", ".json"));
+    if let Some(base) = file_name.strip_suffix(".env.template") {
+        return input.with_file_name(format!("{}.env", base));
+    }
+    if let Some(base) = file_name.strip_suffix(".example.json") {
+        return input.with_file_name(format!("{}.json", base));
+    }
+    if let Some(base) = file_name.strip_suffix(".template.json") {
+        return input.with_file_name(format!("{}.json", base));
+    }
+    if let Some(base) = file_name.strip_suffix(".example.yml") {
+        return input.with_file_name(format!("{}.yml", base));
+    }
+    if let Some(base) = file_name.strip_suffix(".template.yml") {
+        return input.with_file_name(format!("{}.yml", base));
+    }
+    if let Some(base) = file_name.strip_suffix(".example.yaml") {
+        return input.with_file_name(format!("{}.yaml", base));
+    }
+    if let Some(base) = file_name.strip_suffix(".template.yaml") {
+        return input.with_file_name(format!("{}.yaml", base));
+    }
+    if let Some(base) = file_name.strip_suffix(".example.toml") {
+        return input.with_file_name(format!("{}.toml", base));
+    }
+    if let Some(base) = file_name.strip_suffix(".template.toml") {
+        return input.with_file_name(format!("{}.toml", base));
     }
 
     input.with_extension(format!(
         "{}.out",
         input.extension().unwrap_or_default().to_string_lossy()
     ))
+}
+
+/// Discovers common configuration template files in the current directory.
+fn find_input_file() -> Option<PathBuf> {
+    let candidates = [
+        ".env.example",
+        "compose.yml",
+        "docker-compose.yml",
+        ".env.template",
+        "compose.yaml",
+        "docker-compose.yaml",
+    ];
+
+    // Priority 1: Exact matches for well-known defaults
+    for name in &candidates {
+        let path = PathBuf::from(name);
+        if path.exists() {
+            return Some(path);
+        }
+    }
+
+    // Priority 2: Pattern matches
+    if let Ok(entries) = std::fs::read_dir(".") {
+        let mut fallback = None;
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy();
+
+            if name_str.ends_with(".env.example")
+                || name_str.ends_with(".env.template")
+                || name_str.ends_with(".example.json")
+                || name_str.ends_with(".template.json")
+                || name_str.ends_with(".example.yml")
+                || name_str.ends_with(".template.yml")
+                || name_str.ends_with(".example.yaml")
+                || name_str.ends_with(".template.yaml")
+                || name_str.ends_with(".example.toml")
+                || name_str.ends_with(".template.toml")
+            {
+                // Prefer .env.* or compose.* if multiple matches
+                if name_str.contains(".env") || name_str.contains("compose") {
+                    return Some(entry.path());
+                }
+                if fallback.is_none() {
+                    fallback = Some(entry.path());
+                }
+            }
+        }
+        if let Some(path) = fallback {
+            return Some(path);
+        }
+    }
+
+    None
 }
 
 fn main() -> anyhow::Result<()> {
@@ -64,11 +144,27 @@ fn main() -> anyhow::Result<()> {
         .format_timestamp(None)
         .init();
 
-    let input_path = args.input;
-    if !input_path.exists() {
-        error!("Input file not found: {}", input_path.display());
-        return Err(MouldError::FileNotFound(input_path.display().to_string()).into());
-    }
+    let input_path = match args.input {
+        Some(path) => {
+            if !path.exists() {
+                error!("Input file not found: {}", path.display());
+                return Err(MouldError::FileNotFound(path.display().to_string()).into());
+            }
+            path
+        }
+        None => match find_input_file() {
+            Some(path) => {
+                info!("Discovered template: {}", path.display());
+                path
+            }
+            None => {
+                error!("No template file provided and none discovered in current directory.");
+                println!("Usage: mould <INPUT_FILE>");
+                println!("Supported defaults: .env.example, compose.yml, docker-compose.yml, etc.");
+                return Err(MouldError::FileNotFound("None".to_string()).into());
+            }
+        },
+    };
 
     info!("Input: {}", input_path.display());
 
