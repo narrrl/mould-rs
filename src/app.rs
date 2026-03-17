@@ -33,6 +33,8 @@ pub struct App {
     pub input: Input,
     /// The current search query for filtering keys.
     pub search_query: String,
+    /// Stack of previous variable states for undo functionality.
+    pub undo_stack: Vec<Vec<ConfigItem>>,
 }
 
 impl App {
@@ -47,6 +49,7 @@ impl App {
             status_message: None,
             input: Input::new(initial_input),
             search_query: String::new(),
+            undo_stack: Vec::new(),
         }
     }
 
@@ -159,8 +162,8 @@ impl App {
     pub fn enter_insert(&mut self, variant: InsertVariant) {
         if let Some(var) = self.vars.get(self.selected) {
             if !var.is_group {
+                self.save_undo_state();
                 self.mode = Mode::Insert;
-                self.status_message = None;
                 match variant {
                     InsertVariant::Start => {
                         use tui_input::InputRequest;
@@ -190,6 +193,7 @@ impl App {
             return;
         }
 
+        self.save_undo_state();
         let selected_path = self.vars[self.selected].path.clone();
         let is_group = self.vars[self.selected].is_group;
 
@@ -252,6 +256,7 @@ impl App {
             return;
         }
 
+        self.save_undo_state();
         let (base, idx, depth) = {
             let selected_item = &self.vars[self.selected];
             if selected_item.is_group {
@@ -321,6 +326,28 @@ impl App {
         self.vars.get(self.selected)
             .map(|v| v.status == crate::format::ItemStatus::MissingFromActive)
             .unwrap_or(false)
+    }
+
+    /// Saves the current state of variables to the undo stack.
+    pub fn save_undo_state(&mut self) {
+        self.undo_stack.push(self.vars.clone());
+        if self.undo_stack.len() > 50 {
+            self.undo_stack.remove(0);
+        }
+    }
+
+    /// Reverts to the last saved state of variables.
+    pub fn undo(&mut self) {
+        if let Some(previous_vars) = self.undo_stack.pop() {
+            self.vars = previous_vars;
+            if self.selected >= self.vars.len() && !self.vars.is_empty() {
+                self.selected = self.vars.len() - 1;
+            }
+            self.sync_input_with_selected();
+            self.status_message = Some("Undo applied".to_string());
+        } else {
+            self.status_message = Some("Nothing to undo".to_string());
+        }
     }
 }
 

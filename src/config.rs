@@ -119,6 +119,7 @@ pub struct KeybindsConfig {
     pub append_item: String,
     pub prepend_item: String,
     pub delete_item: String,
+    pub undo: String,
 }
 
 impl Default for KeybindsConfig {
@@ -140,6 +141,7 @@ impl Default for KeybindsConfig {
             append_item: "o".to_string(),
             prepend_item: "O".to_string(),
             delete_item: "dd".to_string(),
+            undo: "u".to_string(),
         }
     }
 }

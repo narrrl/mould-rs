@@ -272,21 +272,27 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
     let status_msg = if let Some(msg) = &app.status_message {
         msg.clone()
     } else {
+        let kb = &config.keybinds;
         match app.mode {
             Mode::Normal => {
-                let mut parts = vec!["j/k move", "gg/G jump", "/ search"];
+                let mut parts = vec![
+                    format!("{}/{} move", kb.down, kb.up),
+                    format!("{}/{} jump", kb.jump_top, kb.jump_bottom),
+                    format!("{} search", kb.search),
+                ];
                 if !app.selected_is_group() {
-                    parts.push("i/A/S edit");
+                    parts.push(format!("{}/{}/{} edit", kb.edit, kb.edit_append, kb.edit_substitute));
                 }
                 if app.selected_is_missing() {
-                    parts.push("a add");
+                    parts.push(format!("{} add", "a")); // 'a' is currently hardcoded in runner
                 }
                 if app.selected_is_array() {
-                    parts.push("o/O array");
+                    parts.push(format!("{}/{} array", kb.append_item, kb.prepend_item));
                 }
-                parts.push("dd del");
-                parts.push(":w save");
-                parts.push(":q quit");
+                parts.push(format!("{} del", kb.delete_item));
+                parts.push(format!("{} undo", kb.undo));
+                parts.push(format!("{} save", kb.save));
+                parts.push(format!("{} quit", kb.quit));
                 parts.join(" · ")
             }
             Mode::Insert => "Esc normal · Enter commit".to_string(),

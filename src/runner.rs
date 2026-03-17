@@ -127,6 +127,7 @@ where
                 (&self.config.keybinds.append_item, "append_item"),
                 (&self.config.keybinds.prepend_item, "prepend_item"),
                 (&self.config.keybinds.delete_item, "delete_item"),
+                (&self.config.keybinds.undo, "undo"),
                 (&"a".to_string(), "add_missing"),
                 (&":".to_string(), "command"),
                 (&"q".to_string(), "quit"),
@@ -164,7 +165,11 @@ where
                     "append_item" => self.app.add_array_item(true),
                     "prepend_item" => self.app.add_array_item(false),
                     "delete_item" => self.app.delete_selected(),
-                    "add_missing" => self.add_missing_item(),
+                    "undo" => self.app.undo(),
+                    "add_missing" => {
+                        self.app.save_undo_state();
+                        self.add_missing_item();
+                    }
                     "command" => {
                         self.command_buffer.push(':');
                         self.sync_command_status();

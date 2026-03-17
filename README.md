@@ -64,6 +64,7 @@ mould config.template.json -o config.json
   - `o`: Append a new item to the current array
   - `O`: Prepend a new item to the current array
   - `dd`: Delete the currently selected variable or group
+  - `u`: Undo the last change
   - `a`: Add missing value from template to active config
   - `/`: Search for configuration keys (Jump to matches)
   - `n`: Jump to the next search match
