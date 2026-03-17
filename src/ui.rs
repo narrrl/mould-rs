@@ -269,14 +269,30 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
         ),
     };
 
-    let status_msg = app
-        .status_message
-        .as_deref()
-        .unwrap_or_else(|| match app.mode {
-            Mode::Normal => " navigation | i: edit | /: search | :w: save | :q: quit ",
-            Mode::Insert => " Esc: back to normal | Enter: commit ",
-            Mode::Search => " Esc: back to normal | type to filter ",
-        });
+    let status_msg = if let Some(msg) = &app.status_message {
+        msg.clone()
+    } else {
+        match app.mode {
+            Mode::Normal => {
+                let mut parts = vec!["j/k move", "gg/G jump", "/ search"];
+                if !app.selected_is_group() {
+                    parts.push("i/A/S edit");
+                }
+                if app.selected_is_missing() {
+                    parts.push("a add");
+                }
+                if app.selected_is_array() {
+                    parts.push("o/O array");
+                }
+                parts.push("dd del");
+                parts.push(":w save");
+                parts.push(":q quit");
+                parts.join(" · ")
+            }
+            Mode::Insert => "Esc normal · Enter commit".to_string(),
+            Mode::Search => "Esc normal · type to filter".to_string(),
+        }
+    };
 
     let status_line = Line::from(vec![
         Span::styled(mode_str, mode_style),

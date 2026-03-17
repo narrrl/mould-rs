@@ -11,6 +11,12 @@ pub enum Mode {
     Search,
 }
 
+pub enum InsertVariant {
+    Start,
+    End,
+    Substitute,
+}
+
 /// The core application state, holding all configuration variables and UI status.
 pub struct App {
     /// The list of configuration variables being edited.
@@ -149,12 +155,25 @@ impl App {
         }
     }
 
-    /// Transitions the application into Insert Mode.
-    pub fn enter_insert(&mut self) {
+    /// Transitions the application into Insert Mode with a specific variant.
+    pub fn enter_insert(&mut self, variant: InsertVariant) {
         if let Some(var) = self.vars.get(self.selected) {
             if !var.is_group {
                 self.mode = Mode::Insert;
                 self.status_message = None;
+                match variant {
+                    InsertVariant::Start => {
+                        use tui_input::InputRequest;
+                        self.input.handle(InputRequest::GoToStart);
+                    }
+                    InsertVariant::End => {
+                        use tui_input::InputRequest;
+                        self.input.handle(InputRequest::GoToEnd);
+                    }
+                    InsertVariant::Substitute => {
+                        self.input = Input::new(String::new());
+                    }
+                }
             }
         }
     }
@@ -182,9 +201,13 @@ impl App {
         to_remove.push(self.selected);
 
         if is_group {
-            let prefix = format!("{}.", selected_path);
+            let prefix_dot = format!("{}.", selected_path);
+            let prefix_bracket = format!("{}[", selected_path);
             for (i, var) in self.vars.iter().enumerate() {
-                if var.path.starts_with(&prefix) {
+                if i == self.selected {
+                    continue;
+                }
+                if var.path.starts_with(&prefix_dot) || var.path.starts_with(&prefix_bracket) {
                     to_remove.push(i);
                 }
             }
@@ -279,8 +302,25 @@ impl App {
         self.vars.insert(insert_pos, new_item);
         self.selected = insert_pos;
         self.sync_input_with_selected();
-        self.mode = Mode::Insert;
+        self.enter_insert(InsertVariant::Start);
         self.status_message = None;
+    }
+
+    /// Status bar helpers
+    pub fn selected_is_group(&self) -> bool {
+        self.vars.get(self.selected).map(|v| v.is_group).unwrap_or(false)
+    }
+
+    pub fn selected_is_array(&self) -> bool {
+        self.vars.get(self.selected)
+            .map(|v| !v.is_group && v.path.contains('['))
+            .unwrap_or(false)
+    }
+
+    pub fn selected_is_missing(&self) -> bool {
+        self.vars.get(self.selected)
+            .map(|v| v.status == crate::format::ItemStatus::MissingFromActive)
+            .unwrap_or(false)
     }
 }
 

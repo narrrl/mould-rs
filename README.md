@@ -58,7 +58,9 @@ mould config.template.json -o config.json
   - `k` / `Up`: Move selection up
   - `gg`: Jump to the top
   - `G`: Jump to the bottom
-  - `i`: Edit the value of the currently selected key (Enter Insert Mode)
+  - `i`: Edit value (cursor at start)
+  - `A`: Edit value (cursor at end)
+  - `S`: Substitute value (clear and edit)
   - `o`: Append a new item to the current array
   - `O`: Prepend a new item to the current array
   - `dd`: Delete the currently selected variable or group

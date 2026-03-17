@@ -1,4 +1,4 @@
-use crate::app::{App, Mode};
+use crate::app::{App, InsertVariant, Mode};
 use crate::config::Config;
 use crate::format::FormatHandler;
 use crossterm::event::{self, Event, KeyCode, KeyEvent};
@@ -117,6 +117,8 @@ where
                 (&self.config.keybinds.down, "down"),
                 (&self.config.keybinds.up, "up"),
                 (&self.config.keybinds.edit, "edit"),
+                (&self.config.keybinds.edit_append, "edit_append"),
+                (&self.config.keybinds.edit_substitute, "edit_substitute"),
                 (&self.config.keybinds.search, "search"),
                 (&self.config.keybinds.next_match, "next_match"),
                 (&self.config.keybinds.previous_match, "previous_match"),
@@ -147,7 +149,9 @@ where
                 match action {
                     "down" => self.app.next(),
                     "up" => self.app.previous(),
-                    "edit" => self.app.enter_insert(),
+                    "edit" => self.app.enter_insert(InsertVariant::Start),
+                    "edit_append" => self.app.enter_insert(InsertVariant::End),
+                    "edit_substitute" => self.app.enter_insert(InsertVariant::Substitute),
                     "search" => {
                         self.app.mode = Mode::Search;
                         self.app.search_query.clear();
