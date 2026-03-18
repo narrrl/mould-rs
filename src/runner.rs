@@ -67,6 +67,7 @@ where
         match self.app.mode {
             Mode::Normal => self.handle_normal_mode(key),
             Mode::Insert => self.handle_insert_mode(key),
+            Mode::InsertKey => self.handle_insert_key_mode(key),
             Mode::Search => self.handle_search_mode(key),
         }
     }
@@ -129,6 +130,7 @@ where
                 (&self.config.keybinds.delete_item, "delete_item"),
                 (&self.config.keybinds.undo, "undo"),
                 (&self.config.keybinds.redo, "redo"),
+                (&self.config.keybinds.rename, "rename"),
                 (&"a".to_string(), "add_missing"),
                 (&":".to_string(), "command"),
                 (&"q".to_string(), "quit"),
@@ -168,6 +170,7 @@ where
                     "delete_item" => self.app.delete_selected(),
                     "undo" => self.app.undo(),
                     "redo" => self.app.redo(),
+                    "rename" => self.app.enter_insert_key(),
                     "add_missing" => {
                         self.add_missing_item();
                     }
@@ -213,7 +216,26 @@ where
     /// Delegates key events to the `tui_input` handler during active editing.
     fn handle_insert_mode(&mut self, key: KeyEvent) -> io::Result<()> {
         match key.code {
-            KeyCode::Esc | KeyCode::Enter => {
+            KeyCode::Esc => {
+                self.app.cancel_insert();
+            }
+            KeyCode::Enter => {
+                self.app.enter_normal();
+            }
+            _ => {
+                self.app.input.handle_event(&Event::Key(key));
+            }
+        }
+        Ok(())
+    }
+
+    /// Handles keys in InsertKey mode.
+    fn handle_insert_key_mode(&mut self, key: KeyEvent) -> io::Result<()> {
+        match key.code {
+            KeyCode::Esc => {
+                self.app.cancel_insert();
+            }
+            KeyCode::Enter => {
                 self.app.enter_normal();
             }
             _ => {

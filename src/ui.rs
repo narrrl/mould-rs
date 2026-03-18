@@ -188,7 +188,9 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
     let mut extra_info = String::new();
 
     if let Some(var) = current_var {
-        if var.is_group {
+        if matches!(app.mode, Mode::InsertKey) {
+            input_title = format!(" Rename Key: {} ", var.path_string());
+        } else if var.is_group {
             input_title = format!(" Group: {} ", var.path_string());
         } else {
             input_title = format!(" Editing: {} ", var.path_string());
@@ -199,7 +201,7 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
     }
 
     let input_border_color = match app.mode {
-        Mode::Insert => theme.border_active(),
+        Mode::Insert | Mode::InsertKey => theme.border_active(),
         Mode::Normal | Mode::Search => theme.border_normal(),
     };
 
@@ -259,6 +261,13 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
                 .fg(theme.bg_normal())
                 .add_modifier(Modifier::BOLD),
         ),
+        Mode::InsertKey => (
+            " RENAME ",
+            Style::default()
+                .bg(theme.bg_active())
+                .fg(theme.bg_normal())
+                .add_modifier(Modifier::BOLD),
+        ),
         Mode::Search => (
             " SEARCH ",
             Style::default()
@@ -282,6 +291,7 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
                 if !app.selected_is_group() {
                     parts.push(format!("{}/{}/{} edit", kb.edit, kb.edit_append, kb.edit_substitute));
                 }
+                parts.push(format!("{} rename", kb.rename));
                 if app.selected_is_missing() {
                     parts.push(format!("{} add", "a")); // 'a' is currently hardcoded in runner
                 }
@@ -294,7 +304,8 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
                 parts.push(format!("{} quit", kb.quit));
                 parts.join(" · ")
             }
-            Mode::Insert => "Esc normal · Enter commit".to_string(),
+            Mode::Insert => "Esc cancel · Enter commit".to_string(),
+            Mode::InsertKey => "Esc cancel · Enter rename".to_string(),
             Mode::Search => "Esc normal · type to filter".to_string(),
         }
     };

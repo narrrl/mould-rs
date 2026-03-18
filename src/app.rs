@@ -8,6 +8,8 @@ pub enum Mode {
     Normal,
     /// Active text entry mode for modifying values.
     Insert,
+    /// Active text entry mode for modifying keys.
+    InsertKey,
     /// Active search mode for filtering keys.
     Search,
 }
@@ -145,18 +147,91 @@ impl App {
     /// Updates the input buffer to reflect the value of the currently selected variable.
     pub fn sync_input_with_selected(&mut self) {
         if let Some(var) = self.vars.get(self.selected) {
-            let val = var.value.clone().unwrap_or_default();
+            let val = match self.mode {
+                Mode::InsertKey => var.key.clone(),
+                _ => var.value.clone().unwrap_or_default(),
+            };
             self.input = Input::new(val);
         }
     }
 
-    /// Commits the current text in the input buffer back to the selected variable's value.
-    pub fn commit_input(&mut self) {
-        if let Some(var) = self.vars.get_mut(self.selected)
-            && !var.is_group {
-                var.value = Some(self.input.value().to_string());
-                var.status = crate::format::ItemStatus::Modified;
+    /// Commits the current text in the input buffer back to the selected variable's value or key.
+    /// Returns true if commit was successful, false if there was an error (e.g. collision).
+    pub fn commit_input(&mut self) -> bool {
+        match self.mode {
+            Mode::Insert => {
+                if let Some(var) = self.vars.get_mut(self.selected)
+                    && !var.is_group {
+                        var.value = Some(self.input.value().to_string());
+                        var.status = crate::format::ItemStatus::Modified;
+                    }
+                true
             }
+            Mode::InsertKey => {
+                let new_key = self.input.value().trim().to_string();
+                if new_key.is_empty() {
+                    self.status_message = Some("Key cannot be empty".to_string());
+                    return false;
+                }
+                
+                let selected_var = self.vars[self.selected].clone();
+                if selected_var.key == new_key {
+                    return true;
+                }
+                
+                // Collision check: siblings share the same parent path
+                let parent_path = if selected_var.path.len() > 1 {
+                    &selected_var.path[..selected_var.path.len() - 1]
+                } else {
+                    &[]
+                };
+                
+                let exists = self.vars.iter().enumerate().any(|(i, v)| {
+                    i != self.selected 
+                    && v.path.len() == selected_var.path.len() 
+                    && v.path.starts_with(parent_path)
+                    && v.key == new_key
+                });
+                
+                if exists {
+                    self.status_message = Some(format!("Key already exists: {}", new_key));
+                    return false;
+                }
+                
+                // Update selected item's key and path
+                let old_path = selected_var.path.clone();
+                let mut new_path = parent_path.to_vec();
+                new_path.push(PathSegment::Key(new_key.clone()));
+                
+                {
+                    let var = self.vars.get_mut(self.selected).unwrap();
+                    var.key = new_key;
+                    var.path = new_path.clone();
+                    var.status = crate::format::ItemStatus::Modified;
+                }
+                
+                // Update paths of all children if it's a group
+                if selected_var.is_group {
+                    for var in self.vars.iter_mut() {
+                        if var.path.starts_with(&old_path) && var.path.len() > old_path.len() {
+                            let mut p = new_path.clone();
+                            p.extend(var.path[old_path.len()..].iter().cloned());
+                            var.path = p;
+                        }
+                    }
+                }
+                true
+            }
+            _ => true,
+        }
+    }
+
+    /// Transitions the application into Insert Mode for keys.
+    pub fn enter_insert_key(&mut self) {
+        if !self.vars.is_empty() {
+            self.mode = Mode::InsertKey;
+            self.sync_input_with_selected();
+        }
     }
 
     /// Transitions the application into Insert Mode with a specific variant.
@@ -182,9 +257,17 @@ impl App {
 
     /// Commits the current input and transitions the application into Normal Mode.
     pub fn enter_normal(&mut self) {
-        self.commit_input();
-        self.save_undo_state();
+        if self.commit_input() {
+            self.save_undo_state();
+            self.mode = Mode::Normal;
+        }
+    }
+
+    /// Cancels the current input and transitions the application into Normal Mode.
+    pub fn cancel_insert(&mut self) {
         self.mode = Mode::Normal;
+        self.sync_input_with_selected();
+        self.status_message = None;
     }
 
     /// Deletes the currently selected item. If it's a group, deletes all children.
@@ -365,9 +448,13 @@ impl App {
 
         self.vars.insert(insert_pos, new_item);
         self.selected = insert_pos;
-        self.sync_input_with_selected();
-        self.save_undo_state();
-        self.enter_insert(InsertVariant::Start);
+        if is_array_item {
+            self.sync_input_with_selected();
+            self.save_undo_state();
+            self.enter_insert(InsertVariant::Start);
+        } else {
+            self.enter_insert_key();
+        }
         self.status_message = None;
     }
 

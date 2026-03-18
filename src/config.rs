@@ -121,6 +121,7 @@ pub struct KeybindsConfig {
     pub delete_item: String,
     pub undo: String,
     pub redo: String,
+    pub rename: String,
     }
 
     impl Default for KeybindsConfig {
@@ -144,6 +145,7 @@ pub struct KeybindsConfig {
             delete_item: "dd".to_string(),
             undo: "u".to_string(),
             redo: "U".to_string(),
+            rename: "r".to_string(),
         }
     }
     }
