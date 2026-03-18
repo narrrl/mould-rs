@@ -135,7 +135,7 @@ fn json_to_xml(value: &Value) -> String {
             let mut s = String::new();
             for (k, v) in map {
                 if k == "$text" {
-                    s.push_str(&v.as_str().unwrap_or(""));
+                    s.push_str(v.as_str().unwrap_or(""));
                 } else if let Some(arr) = v.as_array() {
                     for item in arr {
                         s.push_str(&format!("<{}>", k));
@@ -437,8 +437,8 @@ mod tests {
             "port_str": "8080",
             "is_enabled": true,
             "is_enabled_str": "true",
-            "float_num": 3.14,
-            "float_str": "3.14"
+            "float_num": 42.42,
+            "float_str": "42.42"
         });
 
         flatten(&json, "", 0, "", &mut vars);
@@ -466,10 +466,10 @@ mod tests {
         assert_eq!(unflattened["is_enabled_str"].as_str(), Some("true"));
         
         assert!(unflattened["float_num"].is_number(), "float_num should be a number");
-        assert_eq!(unflattened["float_num"].as_f64(), Some(3.14));
+        assert_eq!(unflattened["float_num"].as_f64(), Some(42.42));
         
         assert!(unflattened["float_str"].is_string(), "float_str should be a string");
-        assert_eq!(unflattened["float_str"].as_str(), Some("3.14"));
+        assert_eq!(unflattened["float_str"].as_str(), Some("42.42"));
     }
 
     #[test]

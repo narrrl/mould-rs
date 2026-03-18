@@ -23,15 +23,15 @@ impl FormatHandler for PropertiesHandler {
                 let parts: Vec<&str> = path.split('.').collect();
                 let mut current_path = String::new();
                 
-                for i in 0..parts.len().saturating_sub(1) {
+                for (i, part) in parts.iter().enumerate().take(parts.len().saturating_sub(1)) {
                     if !current_path.is_empty() {
                         current_path.push('.');
                     }
-                    current_path.push_str(parts[i]);
+                    current_path.push_str(part);
                     
                     if groups.insert(current_path.clone()) {
                         vars.push(ConfigItem {
-                            key: parts[i].to_string(),
+                            key: part.to_string(),
                             path: current_path.clone(),
                             value: None,
                             template_value: None,
@@ -73,11 +73,11 @@ impl FormatHandler for PropertiesHandler {
                     .or(var.template_value.as_deref())
                     .unwrap_or("");
                 prop_writer.write(&var.path, val)
-                    .map_err(|e| io::Error::other(e))?;
+                    .map_err(io::Error::other)?;
             }
         }
 
-        prop_writer.finish().map_err(|e| io::Error::other(e))
+        prop_writer.finish().map_err(io::Error::other)
     }
 }
 

@@ -198,15 +198,14 @@ where
 
     /// Adds a missing item from the template to the active configuration.
     fn add_missing_item(&mut self) {
-        if let Some(var) = self.app.vars.get_mut(self.app.selected) {
-            if var.status == crate::format::ItemStatus::MissingFromActive {
+        if let Some(var) = self.app.vars.get_mut(self.app.selected)
+            && var.status == crate::format::ItemStatus::MissingFromActive {
                 var.status = crate::format::ItemStatus::Present;
                 if !var.is_group {
                     var.value = var.template_value.clone();
                 }
                 self.app.sync_input_with_selected();
             }
-        }
     }
 
     /// Delegates key events to the `tui_input` handler during active editing.

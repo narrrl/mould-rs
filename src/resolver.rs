@@ -50,12 +50,10 @@ pub fn determine_output_path(input: &Path) -> PathBuf {
             if file_name == rule.template_suffix {
                 return input.with_file_name(rule.active_suffix);
             }
-        } else {
-            if file_name == rule.template_suffix {
-                return input.with_file_name(rule.active_suffix);
-            } else if let Some(base) = file_name.strip_suffix(rule.template_suffix) {
-                return input.with_file_name(format!("{}{}", base, rule.active_suffix));
-            }
+        } else if file_name == rule.template_suffix {
+            return input.with_file_name(rule.active_suffix);
+        } else if let Some(base) = file_name.strip_suffix(rule.template_suffix) {
+            return input.with_file_name(format!("{}{}", base, rule.active_suffix));
         }
     }
 

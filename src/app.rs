@@ -40,7 +40,7 @@ pub struct App {
 impl App {
     /// Initializes a new application instance with the provided variables.
     pub fn new(vars: Vec<ConfigItem>) -> Self {
-        let initial_input = vars.get(0).and_then(|v| v.value.clone()).unwrap_or_default();
+        let initial_input = vars.first().and_then(|v| v.value.clone()).unwrap_or_default();
         Self {
             vars,
             selected: 0,
@@ -150,18 +150,17 @@ impl App {
 
     /// Commits the current text in the input buffer back to the selected variable's value.
     pub fn commit_input(&mut self) {
-        if let Some(var) = self.vars.get_mut(self.selected) {
-            if !var.is_group {
+        if let Some(var) = self.vars.get_mut(self.selected)
+            && !var.is_group {
                 var.value = Some(self.input.value().to_string());
                 var.status = crate::format::ItemStatus::Modified;
             }
-        }
     }
 
     /// Transitions the application into Insert Mode with a specific variant.
     pub fn enter_insert(&mut self, variant: InsertVariant) {
-        if let Some(var) = self.vars.get(self.selected) {
-            if !var.is_group {
+        if let Some(var) = self.vars.get(self.selected)
+            && !var.is_group {
                 self.save_undo_state();
                 self.mode = Mode::Insert;
                 match variant {
@@ -178,7 +177,6 @@ impl App {
                     }
                 }
             }
-        }
     }
 
     /// Commits the current input and transitions the application into Normal Mode.
@@ -229,8 +227,8 @@ impl App {
             for var in self.vars.iter_mut() {
                 if var.path.starts_with(&base) {
                     // We need to find the index segment that matches this array
-                    if let Some((b, i, suffix)) = find_array_segment(&var.path, &base) {
-                        if b == base && i > removed_idx {
+                    if let Some((b, i, suffix)) = find_array_segment(&var.path, &base)
+                        && b == base && i > removed_idx {
                             let new_idx = i - 1;
                             var.path = format!("{}[{}]{}", base, new_idx, suffix);
                             // Also update key if it matches the old index exactly
@@ -238,7 +236,6 @@ impl App {
                                 var.key = format!("[{}]", new_idx);
                             }
                         }
-                    }
                 }
             }
         }
@@ -279,17 +276,15 @@ impl App {
 
         // 1. Shift all items in this array that have index >= new_idx
         for var in self.vars.iter_mut() {
-            if var.path.starts_with(&base) {
-                if let Some((b, i)) = parse_index(&var.path) {
-                    if b == base && i >= new_idx {
+            if var.path.starts_with(&base)
+                && let Some((b, i)) = parse_index(&var.path)
+                    && b == base && i >= new_idx {
                         var.path = format!("{}[{}]", base, i + 1);
                         // Also update key if it was just the index
                         if var.key == format!("[{}]", i) {
                             var.key = format!("[{}]", i + 1);
                         }
                     }
-                }
-            }
         }
 
         // 2. Insert new item
@@ -354,12 +349,11 @@ impl App {
 fn parse_index(path: &str) -> Option<(&str, usize)> {
     if let Some(end) = path.rfind(']') {
         let segment = &path[..=end];
-        if let Some(start) = segment.rfind('[') {
-            if let Ok(idx) = segment[start + 1..end].parse::<usize>() {
+        if let Some(start) = segment.rfind('[')
+            && let Ok(idx) = segment[start + 1..end].parse::<usize>() {
                 // Return the base and index
                 return Some((&path[..start], idx));
             }
-        }
     }
     None
 }
@@ -370,12 +364,10 @@ fn find_array_segment<'a>(path: &'a str, base: &str) -> Option<(&'a str, usize, 
         return None;
     }
     let remaining = &path[base.len()..];
-    if remaining.starts_with('[') {
-        if let Some(end) = remaining.find(']') {
-            if let Ok(idx) = remaining[1..end].parse::<usize>() {
+    if remaining.starts_with('[')
+        && let Some(end) = remaining.find(']')
+            && let Ok(idx) = remaining[1..end].parse::<usize>() {
                 return Some((&path[..base.len()], idx, &remaining[end + 1..]));
             }
-        }
-    }
     None
 }

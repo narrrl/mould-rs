@@ -99,21 +99,15 @@ pub fn detect_format(path: &Path, override_format: Option<String>) -> FormatType
         }
     }
 
-    let file_name = path.file_name().unwrap_or_default().to_string_lossy();
-    if file_name.ends_with(".json") {
-        FormatType::Json
-    } else if file_name.ends_with(".yaml") || file_name.ends_with(".yml") {
-        FormatType::Yaml
-    } else if file_name.ends_with(".toml") {
-        FormatType::Toml
-    } else if file_name.ends_with(".xml") {
-        FormatType::Xml
-    } else if file_name.ends_with(".ini") {
-        FormatType::Ini
-    } else if file_name.ends_with(".properties") {
-        FormatType::Properties
-    } else {
-        FormatType::Env
+    let ext = path.extension().and_then(|s| s.to_str()).unwrap_or_default();
+    match ext {
+        "json" => FormatType::Json,
+        "yaml" | "yml" => FormatType::Yaml,
+        "toml" => FormatType::Toml,
+        "xml" => FormatType::Xml,
+        "ini" => FormatType::Ini,
+        "properties" => FormatType::Properties,
+        _ => FormatType::Env,
     }
 }
 

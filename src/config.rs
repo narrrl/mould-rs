@@ -162,13 +162,11 @@ pub fn load_config() -> Config {
         config_dir.push("mould");
         config_dir.push("config.toml");
 
-        if config_dir.exists() {
-            if let Ok(content) = fs::read_to_string(config_dir) {
-                if let Ok(config) = toml::from_str(&content) {
+        if config_dir.exists()
+            && let Ok(content) = fs::read_to_string(config_dir)
+                && let Ok(config) = toml::from_str(&content) {
                     return config;
                 }
-            }
-        }
     }
     Config::default()
 }

@@ -150,8 +150,8 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
                     Span::styled(val, value_style),
                 ];
 
-                if let Some(t_val) = &var.template_value {
-                    if Some(t_val) != var.value.as_ref() {
+                if let Some(t_val) = &var.template_value
+                    && Some(t_val) != var.value.as_ref() {
                         let t_style = if is_selected {
                             Style::default().fg(theme.bg_normal()).add_modifier(Modifier::DIM)
                         } else {
@@ -159,7 +159,6 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
                         };
                         val_spans.push(Span::styled(format!(" [Def: {}]", t_val), t_style));
                     }
-                }
 
                 ListItem::new(vec![Line::from(key_spans), Line::from(val_spans)]).style(item_style)
             }
