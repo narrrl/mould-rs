@@ -124,6 +124,9 @@ where
         if !key_str.is_empty() {
             self.key_sequence.push_str(&key_str);
 
+            let mut exact_match = None;
+            let mut prefix_match = false;
+
             // Collect all configured keybinds
             let binds = [
                 (&self.config.keybinds.down, "down"),
@@ -131,6 +134,7 @@ where
                 (&self.config.keybinds.edit, "edit"),
                 (&self.config.keybinds.edit_append, "edit_append"),
                 (&self.config.keybinds.edit_substitute, "edit_substitute"),
+                (&"S".to_string(), "edit_substitute"),
                 (&self.config.keybinds.search, "search"),
                 (&self.config.keybinds.next_match, "next_match"),
                 (&self.config.keybinds.previous_match, "previous_match"),
@@ -150,15 +154,27 @@ where
                 (&"q".to_string(), "quit"),
             ];
 
-            let mut exact_match = None;
-            let mut prefix_match = false;
-
             for (bind, action) in binds.iter() {
                 if bind == &&self.key_sequence {
                     exact_match = Some(*action);
                     break;
                 } else if bind.starts_with(&self.key_sequence) {
                     prefix_match = true;
+                }
+            }
+
+            if exact_match.is_none() && !prefix_match {
+                // Not a match and not a prefix, restart with current key
+                self.key_sequence.clear();
+                self.key_sequence.push_str(&key_str);
+                
+                for (bind, action) in binds.iter() {
+                    if bind == &&self.key_sequence {
+                        exact_match = Some(*action);
+                        break;
+                    } else if bind.starts_with(&self.key_sequence) {
+                        prefix_match = true;
+                    }
                 }
             }
 
@@ -203,7 +219,6 @@ where
                 }
             } else if !prefix_match {
                 self.key_sequence.clear();
-                self.key_sequence.push_str(&key_str);
             }
         } else {
             // Non-character keys reset the sequence buffer
