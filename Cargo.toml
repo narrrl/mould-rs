@@ -1,3 +1,9 @@
+[package]
+authors = ["Nils Pukropp <nils@narl.io>"]
+edition = "2024"
+name = "mould"
+version = "0.4.3"
+
 [[bin]]
 name = "mould"
 path = "src/main.rs"
@@ -25,9 +31,3 @@ version = "1.0.228"
 
 [dev-dependencies]
 tempfile = "3.27.0"
-
-[package]
-authors = ["Nils Pukropp <nils@narl.io>"]
-edition = "2024"
-name = "mould"
-version = "0.4.3"
