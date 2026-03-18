@@ -120,16 +120,21 @@ pub struct KeybindsConfig {
     pub prepend_item: String,
     pub delete_item: String,
     pub undo: String,
-}
+    pub redo: String,
+    pub rename: String,
+    pub append_group: String,
+    pub prepend_group: String,
+    pub toggle_group: String,
+    }
 
-impl Default for KeybindsConfig {
+    impl Default for KeybindsConfig {
     fn default() -> Self {
         Self {
             down: "j".to_string(),
             up: "k".to_string(),
             edit: "i".to_string(),
-            edit_append: "A".to_string(),
-            edit_substitute: "S".to_string(),
+            edit_append: "a".to_string(),
+            edit_substitute: "s".to_string(),
             save: ":w".to_string(),
             quit: ":q".to_string(),
             normal_mode: "Esc".to_string(),
@@ -142,9 +147,14 @@ impl Default for KeybindsConfig {
             prepend_item: "O".to_string(),
             delete_item: "dd".to_string(),
             undo: "u".to_string(),
+            redo: "U".to_string(),
+            rename: "r".to_string(),
+            append_group: "alt+o".to_string(),
+            prepend_group: "alt+O".to_string(),
+            toggle_group: "t".to_string(),
         }
     }
-}
+    }
 
 /// Root configuration structure for mould.
 #[derive(Debug, Deserialize, Serialize, Default, Clone)]
@@ -162,13 +172,11 @@ pub fn load_config() -> Config {
         config_dir.push("mould");
         config_dir.push("config.toml");
 
-        if config_dir.exists() {
-            if let Ok(content) = fs::read_to_string(config_dir) {
-                if let Ok(config) = toml::from_str(&content) {
+        if config_dir.exists()
+            && let Ok(content) = fs::read_to_string(config_dir)
+                && let Ok(config) = toml::from_str(&content) {
                     return config;
                 }
-            }
-        }
     }
     Config::default()
 }

@@ -67,6 +67,7 @@ where
         match self.app.mode {
             Mode::Normal => self.handle_normal_mode(key),
             Mode::Insert => self.handle_insert_mode(key),
+            Mode::InsertKey => self.handle_insert_key_mode(key),
             Mode::Search => self.handle_search_mode(key),
         }
     }
@@ -109,8 +110,22 @@ where
 
     /// Handles primary navigation (j/k) and transitions to insert or command modes.
     fn handle_navigation_mode(&mut self, key: KeyEvent) -> io::Result<()> {
-        if let KeyCode::Char(c) = key.code {
-            self.key_sequence.push(c);
+        let key_str = if let KeyCode::Char(c) = key.code {
+            let mut s = String::new();
+            if key.modifiers.contains(event::KeyModifiers::ALT) {
+                s.push_str("alt+");
+            }
+            s.push(c);
+            s
+        } else {
+            String::new()
+        };
+
+        if !key_str.is_empty() {
+            self.key_sequence.push_str(&key_str);
+
+            let mut exact_match = None;
+            let mut prefix_match = false;
 
             // Collect all configured keybinds
             let binds = [
@@ -119,6 +134,7 @@ where
                 (&self.config.keybinds.edit, "edit"),
                 (&self.config.keybinds.edit_append, "edit_append"),
                 (&self.config.keybinds.edit_substitute, "edit_substitute"),
+                (&"S".to_string(), "edit_substitute"),
                 (&self.config.keybinds.search, "search"),
                 (&self.config.keybinds.next_match, "next_match"),
                 (&self.config.keybinds.previous_match, "previous_match"),
@@ -128,13 +144,15 @@ where
                 (&self.config.keybinds.prepend_item, "prepend_item"),
                 (&self.config.keybinds.delete_item, "delete_item"),
                 (&self.config.keybinds.undo, "undo"),
+                (&self.config.keybinds.redo, "redo"),
+                (&self.config.keybinds.rename, "rename"),
+                (&self.config.keybinds.append_group, "append_group"),
+                (&self.config.keybinds.prepend_group, "prepend_group"),
+                (&self.config.keybinds.toggle_group, "toggle_group"),
                 (&"a".to_string(), "add_missing"),
                 (&":".to_string(), "command"),
                 (&"q".to_string(), "quit"),
             ];
-
-            let mut exact_match = None;
-            let mut prefix_match = false;
 
             for (bind, action) in binds.iter() {
                 if bind == &&self.key_sequence {
@@ -142,6 +160,21 @@ where
                     break;
                 } else if bind.starts_with(&self.key_sequence) {
                     prefix_match = true;
+                }
+            }
+
+            if exact_match.is_none() && !prefix_match {
+                // Not a match and not a prefix, restart with current key
+                self.key_sequence.clear();
+                self.key_sequence.push_str(&key_str);
+                
+                for (bind, action) in binds.iter() {
+                    if bind == &&self.key_sequence {
+                        exact_match = Some(*action);
+                        break;
+                    } else if bind.starts_with(&self.key_sequence) {
+                        prefix_match = true;
+                    }
                 }
             }
 
@@ -162,12 +195,19 @@ where
                     "previous_match" => self.app.jump_previous_match(),
                     "jump_top" => self.app.jump_top(),
                     "jump_bottom" => self.app.jump_bottom(),
-                    "append_item" => self.app.add_array_item(true),
-                    "prepend_item" => self.app.add_array_item(false),
+                    "append_item" => self.app.add_item(true, false, false),
+                    "prepend_item" => self.app.add_item(false, false, false),
                     "delete_item" => self.app.delete_selected(),
                     "undo" => self.app.undo(),
-                    "add_missing" => {
+                    "redo" => self.app.redo(),
+                    "rename" => self.app.enter_insert_key(),
+                    "append_group" => self.app.add_item(true, true, true),
+                    "prepend_group" => self.app.add_item(false, true, true),
+                    "toggle_group" => {
+                        self.app.toggle_group_selected();
                         self.app.save_undo_state();
+                    }
+                    "add_missing" => {
                         self.add_missing_item();
                     }
                     "command" => {
@@ -178,9 +218,7 @@ where
                     _ => {}
                 }
             } else if !prefix_match {
-                // Not an exact match and not a prefix for any bind, clear and restart seq
                 self.key_sequence.clear();
-                self.key_sequence.push(c);
             }
         } else {
             // Non-character keys reset the sequence buffer
@@ -198,21 +236,40 @@ where
 
     /// Adds a missing item from the template to the active configuration.
     fn add_missing_item(&mut self) {
-        if let Some(var) = self.app.vars.get_mut(self.app.selected) {
-            if var.status == crate::format::ItemStatus::MissingFromActive {
+        if let Some(var) = self.app.vars.get_mut(self.app.selected)
+            && var.status == crate::format::ItemStatus::MissingFromActive {
                 var.status = crate::format::ItemStatus::Present;
                 if !var.is_group {
                     var.value = var.template_value.clone();
                 }
                 self.app.sync_input_with_selected();
+                self.app.save_undo_state();
             }
-        }
     }
 
     /// Delegates key events to the `tui_input` handler during active editing.
     fn handle_insert_mode(&mut self, key: KeyEvent) -> io::Result<()> {
         match key.code {
-            KeyCode::Esc | KeyCode::Enter => {
+            KeyCode::Esc => {
+                self.app.cancel_insert();
+            }
+            KeyCode::Enter => {
+                self.app.enter_normal();
+            }
+            _ => {
+                self.app.input.handle_event(&Event::Key(key));
+            }
+        }
+        Ok(())
+    }
+
+    /// Handles keys in InsertKey mode.
+    fn handle_insert_key_mode(&mut self, key: KeyEvent) -> io::Result<()> {
+        match key.code {
+            KeyCode::Esc => {
+                self.app.cancel_insert();
+            }
+            KeyCode::Enter => {
                 self.app.enter_normal();
             }
             _ => {

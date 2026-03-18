@@ -103,24 +103,30 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
                 Span::styled(&var.key, key_style),
             ];
 
-            // Add status indicator if not present (only for leaf variables)
-            if !var.is_group {
-                match var.status {
-                    crate::format::ItemStatus::MissingFromActive => {
-                        let missing_style = if is_selected {
-                            Style::default().fg(theme.fg_highlight()).add_modifier(Modifier::BOLD)
-                        } else {
-                            Style::default().fg(theme.fg_warning()).add_modifier(Modifier::BOLD)
-                        };
-                        key_spans.push(Span::styled(" (missing)", missing_style));
-                    }
-                    crate::format::ItemStatus::Modified => {
-                        if !is_selected {
-                            key_spans.push(Span::styled(" (*)", Style::default().fg(theme.fg_modified())));
-                        }
-                    }
-                    _ => {}
+            // Add status indicator if not present
+            match var.status {
+                crate::format::ItemStatus::MissingFromActive if !var.is_group => {
+                    let missing_style = if is_selected {
+                        Style::default().fg(theme.fg_highlight()).add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(theme.fg_warning()).add_modifier(Modifier::BOLD)
+                    };
+                    key_spans.push(Span::styled(" (missing)", missing_style));
                 }
+                crate::format::ItemStatus::MissingFromActive if var.is_group => {
+                    let missing_style = if is_selected {
+                        Style::default().fg(theme.fg_highlight()).add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(theme.fg_warning()).add_modifier(Modifier::BOLD)
+                    };
+                    key_spans.push(Span::styled(" (missing group)", missing_style));
+                }
+                crate::format::ItemStatus::Modified => {
+                    if !is_selected {
+                        key_spans.push(Span::styled(" (*)", Style::default().fg(theme.fg_modified())));
+                    }
+                }
+                _ => {}
             }
 
             let item_style = if is_selected {
@@ -150,8 +156,8 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
                     Span::styled(val, value_style),
                 ];
 
-                if let Some(t_val) = &var.template_value {
-                    if Some(t_val) != var.value.as_ref() {
+                if let Some(t_val) = &var.template_value
+                    && Some(t_val) != var.value.as_ref() {
                         let t_style = if is_selected {
                             Style::default().fg(theme.bg_normal()).add_modifier(Modifier::DIM)
                         } else {
@@ -159,7 +165,6 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
                         };
                         val_spans.push(Span::styled(format!(" [Def: {}]", t_val), t_style));
                     }
-                }
 
                 ListItem::new(vec![Line::from(key_spans), Line::from(val_spans)]).style(item_style)
             }
@@ -189,10 +194,12 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
     let mut extra_info = String::new();
 
     if let Some(var) = current_var {
-        if var.is_group {
-            input_title = format!(" Group: {} ", var.path);
+        if matches!(app.mode, Mode::InsertKey) {
+            input_title = format!(" Rename Key: {} ", var.path_string());
+        } else if var.is_group {
+            input_title = format!(" Group: {} ", var.path_string());
         } else {
-            input_title = format!(" Editing: {} ", var.path);
+            input_title = format!(" Editing: {} ", var.path_string());
             if let Some(t_val) = &var.template_value {
                 extra_info = format!("  [Template: {}]", t_val);
             }
@@ -200,7 +207,7 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
     }
 
     let input_border_color = match app.mode {
-        Mode::Insert => theme.border_active(),
+        Mode::Insert | Mode::InsertKey => theme.border_active(),
         Mode::Normal | Mode::Search => theme.border_normal(),
     };
 
@@ -209,7 +216,9 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
 
     // Show template value in normal mode if it differs
     let display_text = if let Some(var) = current_var {
-        if var.is_group {
+        if matches!(app.mode, Mode::InsertKey) {
+            input_text.to_string()
+        } else if var.is_group {
             "<group>".to_string()
         } else if matches!(app.mode, Mode::Normal) {
             format!("{}{}", input_text, extra_info)
@@ -237,7 +246,7 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
     f.render_widget(input, chunks[2]);
 
     // Position the terminal cursor correctly when in Insert mode.
-    if let Mode::Insert = app.mode {
+    if matches!(app.mode, Mode::Insert) || matches!(app.mode, Mode::InsertKey) {
         f.set_cursor_position(ratatui::layout::Position::new(
             chunks[2].x + 1 + cursor_pos as u16,
             chunks[2].y + 1,
@@ -255,6 +264,13 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
         ),
         Mode::Insert => (
             " INSERT ",
+            Style::default()
+                .bg(theme.bg_active())
+                .fg(theme.bg_normal())
+                .add_modifier(Modifier::BOLD),
+        ),
+        Mode::InsertKey => (
+            " RENAME ",
             Style::default()
                 .bg(theme.bg_active())
                 .fg(theme.bg_normal())
@@ -283,11 +299,16 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
                 if !app.selected_is_group() {
                     parts.push(format!("{}/{}/{} edit", kb.edit, kb.edit_append, kb.edit_substitute));
                 }
+                parts.push(format!("{} rename", kb.rename));
+                parts.push(format!("{} toggle", kb.toggle_group));
                 if app.selected_is_missing() {
                     parts.push(format!("{} add", "a")); // 'a' is currently hardcoded in runner
                 }
                 if app.selected_is_array() {
                     parts.push(format!("{}/{} array", kb.append_item, kb.prepend_item));
+                } else {
+                    parts.push(format!("{}/{} add", kb.append_item, kb.prepend_item));
+                    parts.push(format!("{}/{} group", kb.append_group, kb.prepend_group));
                 }
                 parts.push(format!("{} del", kb.delete_item));
                 parts.push(format!("{} undo", kb.undo));
@@ -295,7 +316,8 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
                 parts.push(format!("{} quit", kb.quit));
                 parts.join(" · ")
             }
-            Mode::Insert => "Esc normal · Enter commit".to_string(),
+            Mode::Insert => "Esc cancel · Enter commit".to_string(),
+            Mode::InsertKey => "Esc cancel · Enter rename".to_string(),
             Mode::Search => "Esc normal · type to filter".to_string(),
         }
     };

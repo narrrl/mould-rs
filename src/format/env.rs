@@ -1,12 +1,12 @@
-use super::{ConfigItem, FormatHandler, ItemStatus, ValueType};
+use super::{ConfigItem, FormatHandler, ItemStatus, ValueType, PathSegment};
 use std::fs;
-use std::io::{self, Write};
+use std::io::Write;
 use std::path::Path;
 
 pub struct EnvHandler;
 
 impl FormatHandler for EnvHandler {
-    fn parse(&self, path: &Path) -> io::Result<Vec<ConfigItem>> {
+    fn parse(&self, path: &Path) -> anyhow::Result<Vec<ConfigItem>> {
         let content = fs::read_to_string(path)?;
         let mut vars = Vec::new();
 
@@ -18,9 +18,10 @@ impl FormatHandler for EnvHandler {
 
             if let Some((key, val)) = line.split_once('=') {
                 let parsed_val = val.trim().trim_matches('"').trim_matches('\'').to_string();
+                let key_str = key.trim().to_string();
                 vars.push(ConfigItem {
-                    key: key.trim().to_string(),
-                    path: key.trim().to_string(),
+                    key: key_str.clone(),
+                    path: vec![PathSegment::Key(key_str)],
                     value: Some(parsed_val.clone()),
                     template_value: Some(parsed_val.clone()),
                     default_value: Some(parsed_val),
@@ -35,54 +36,7 @@ impl FormatHandler for EnvHandler {
         Ok(vars)
     }
 
-    fn merge(&self, path: &Path, vars: &mut Vec<ConfigItem>) -> io::Result<()> {
-        if !path.exists() {
-            return Ok(());
-        }
-
-        let content = fs::read_to_string(path)?;
-        for line in content.lines() {
-            let line = line.trim();
-            if line.is_empty() || line.starts_with('#') {
-                continue;
-            }
-
-            if let Some((key, val)) = line.split_once('=') {
-                let key = key.trim();
-                let parsed_val = val.trim().trim_matches('"').trim_matches('\'').to_string();
-
-                if let Some(var) = vars.iter_mut().find(|v| v.key == key) {
-                    if var.value.as_deref() != Some(&parsed_val) {
-                        var.value = Some(parsed_val);
-                        var.status = ItemStatus::Modified;
-                    }
-                } else {
-                    vars.push(ConfigItem {
-                        key: key.to_string(),
-                        path: key.to_string(),
-                        value: Some(parsed_val),
-                        template_value: None,
-                        default_value: None,
-                        depth: 0,
-                        is_group: false,
-                        status: ItemStatus::MissingFromTemplate,
-                        value_type: ValueType::String,
-                    });
-                }
-            }
-        }
-        
-        // Mark missing from active
-        for var in vars.iter_mut() {
-            if var.status == ItemStatus::Present && var.value.is_none() {
-                var.status = ItemStatus::MissingFromActive;
-            }
-        }
-
-        Ok(())
-    }
-
-    fn write(&self, path: &Path, vars: &[ConfigItem]) -> io::Result<()> {
+    fn write(&self, path: &Path, vars: &[ConfigItem]) -> anyhow::Result<()> {
         let mut file = fs::File::create(path)?;
         for var in vars {
             if !var.is_group {
@@ -126,27 +80,36 @@ mod tests {
 
     #[test]
     fn test_merge_env() {
-        let mut example_file = NamedTempFile::new().unwrap();
-        writeln!(example_file, "KEY1=default1\nKEY2=default2").unwrap();
         let handler = EnvHandler;
-        let mut vars = handler.parse(example_file.path()).unwrap();
 
         let mut env_file = NamedTempFile::new().unwrap();
         writeln!(env_file, "KEY1=custom1\nKEY3=custom3").unwrap();
+        let mut vars = handler.parse(env_file.path()).unwrap(); // Active vars
 
-        handler.merge(env_file.path(), &mut vars).unwrap();
+        let mut example_file = NamedTempFile::new().unwrap();
+        writeln!(example_file, "KEY1=default1\nKEY2=default2").unwrap();
 
+        handler.merge(example_file.path(), &mut vars).unwrap(); // Merge template into active
+
+        // Should preserve order of active, then append template
         assert_eq!(vars.len(), 3);
+        
+        // Active key that exists in template
         assert_eq!(vars[0].key, "KEY1");
-        assert_eq!(vars[0].value.as_deref(), Some("custom1"));
+        assert_eq!(vars[0].value.as_deref(), Some("custom1")); // Keeps active value
+        assert_eq!(vars[0].template_value.as_deref(), Some("default1")); // Gets template default
         assert_eq!(vars[0].status, ItemStatus::Modified);
 
-        assert_eq!(vars[1].key, "KEY2");
-        assert_eq!(vars[1].value.as_deref(), Some("default2"));
+        // Active key that DOES NOT exist in template
+        assert_eq!(vars[1].key, "KEY3");
+        assert_eq!(vars[1].value.as_deref(), Some("custom3"));
+        assert_eq!(vars[1].status, ItemStatus::Present);
         
-        assert_eq!(vars[2].key, "KEY3");
-        assert_eq!(vars[2].value.as_deref(), Some("custom3"));
-        assert_eq!(vars[2].status, ItemStatus::MissingFromTemplate);
+        // Template key that DOES NOT exist in active
+        assert_eq!(vars[2].key, "KEY2");
+        assert_eq!(vars[2].value.as_deref(), None); // Missing from active
+        assert_eq!(vars[2].template_value.as_deref(), Some("default2"));
+        assert_eq!(vars[2].status, ItemStatus::MissingFromActive);
     }
 
     #[test]
@@ -154,7 +117,7 @@ mod tests {
         let file = NamedTempFile::new().unwrap();
         let vars = vec![ConfigItem {
             key: "KEY1".to_string(),
-            path: "KEY1".to_string(),
+            path: vec![PathSegment::Key("KEY1".to_string())],
             value: Some("value1".to_string()),
             template_value: None,
             default_value: None,

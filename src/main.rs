@@ -6,6 +6,7 @@ mod format;
 mod runner;
 mod ui;
 mod resolver;
+mod undo;
 
 use app::App;
 use config::load_config;
@@ -96,10 +97,7 @@ fn main() -> anyhow::Result<()> {
         }
     } else if vars.is_empty() {
         // Fallback if no template and active is empty
-         vars = handler.parse(&input_path).map_err(|e| {
-            error!("Failed to parse input file: {}", e);
-            MouldError::Format(format!("Failed to parse {}: {}", input_path.display(), e))
-        })?;
+         vars = handler.parse(&input_path)?;
     }
 
     if vars.is_empty() {
