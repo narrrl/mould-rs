@@ -119,38 +119,99 @@ fn xml_to_json(content: &str) -> anyhow::Result<Value> {
 }
 
 fn json_to_xml(value: &Value) -> String {
-    match value {
-        Value::Object(map) => {
-            let mut s = String::new();
-            for (k, v) in map {
-                if k == "$text" {
-                    s.push_str(v.as_str().unwrap_or(""));
-                } else if let Some(arr) = v.as_array() {
-                    for item in arr {
-                        s.push_str(&format!("<{}>", k));
-                        s.push_str(&json_to_xml(item));
-                        s.push_str(&format!("</{}>", k));
+    use quick_xml::Writer;
+    use quick_xml::events::{Event, BytesStart, BytesEnd, BytesText};
+
+    let mut writer = Writer::new_with_indent(Vec::new(), b' ', 4);
+    
+    fn write_recursive(writer: &mut Writer<Vec<u8>>, value: &Value, key_name: Option<&str>) {
+        if let Some(k) = key_name {
+            if k == "$text" {
+                if let Some(s) = value.as_str() {
+                    writer.write_event(Event::Text(BytesText::new(s))).unwrap();
+                }
+                return;
+            }
+        }
+        
+        match value {
+            Value::Object(map) => {
+                if let Some(k) = key_name {
+                    writer.write_event(Event::Start(BytesStart::new(k))).unwrap();
+                }
+                for (k, v) in map {
+                    if let Some(arr) = v.as_array() {
+                        for item in arr {
+                            write_recursive(writer, item, Some(k));
+                        }
+                    } else {
+                        write_recursive(writer, v, Some(k));
                     }
-                } else {
-                    s.push_str(&format!("<{}>", k));
-                    s.push_str(&json_to_xml(v));
-                    s.push_str(&format!("</{}>", k));
+                }
+                if let Some(k) = key_name {
+                    writer.write_event(Event::End(BytesEnd::new(k))).unwrap();
                 }
             }
-            s
-        }
-        Value::Array(arr) => {
-            let mut s = String::new();
-            for v in arr {
-                s.push_str(&json_to_xml(v));
+            Value::Array(arr) => {
+                for v in arr {
+                    write_recursive(writer, v, key_name);
+                }
             }
-            s
+            Value::String(s) => {
+                if let Some(k) = key_name {
+                    writer.write_event(Event::Start(BytesStart::new(k))).unwrap();
+                }
+                writer.write_event(Event::Text(BytesText::new(s))).unwrap();
+                if let Some(k) = key_name {
+                    writer.write_event(Event::End(BytesEnd::new(k))).unwrap();
+                }
+            }
+            Value::Number(n) => {
+                if let Some(k) = key_name {
+                    writer.write_event(Event::Start(BytesStart::new(k))).unwrap();
+                }
+                writer.write_event(Event::Text(BytesText::new(&n.to_string()))).unwrap();
+                if let Some(k) = key_name {
+                    writer.write_event(Event::End(BytesEnd::new(k))).unwrap();
+                }
+            }
+            Value::Bool(b) => {
+                if let Some(k) = key_name {
+                    writer.write_event(Event::Start(BytesStart::new(k))).unwrap();
+                }
+                writer.write_event(Event::Text(BytesText::new(&b.to_string()))).unwrap();
+                if let Some(k) = key_name {
+                    writer.write_event(Event::End(BytesEnd::new(k))).unwrap();
+                }
+            }
+            Value::Null => {
+                if let Some(k) = key_name {
+                    writer.write_event(Event::Empty(BytesStart::new(k))).unwrap();
+                }
+            }
         }
-        Value::String(v) => v.clone(),
-        Value::Number(v) => v.to_string(),
-        Value::Bool(v) => v.to_string(),
-        Value::Null => "".to_string(),
     }
+
+    if value.is_object() {
+        for (k, v) in value.as_object().unwrap() {
+            if let Some(arr) = v.as_array() {
+                for item in arr {
+                    write_recursive(&mut writer, item, Some(k));
+                }
+            } else {
+                write_recursive(&mut writer, v, Some(k));
+            }
+        }
+    } else {
+        write_recursive(&mut writer, value, None);
+    }
+    
+    // Quick-XML adds a trailing newline occasionally, or we might need one
+    let mut out = String::from_utf8(writer.into_inner()).unwrap();
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out
 }
 
 fn flatten(value: &Value, current_path: Vec<PathSegment>, key_name: Option<String>, depth: usize, vars: &mut Vec<ConfigItem>) {
