@@ -283,43 +283,6 @@ impl FormatHandler for HierarchicalHandler {
         Ok(vars)
     }
 
-    fn merge(&self, path: &Path, vars: &mut Vec<ConfigItem>) -> io::Result<()> {
-        if !path.exists() {
-            return Ok(());
-        }
-        let existing_value = self.read_value(path)?;
-        let mut existing_vars = Vec::new();
-        flatten(&existing_value, "", 0, "", &mut existing_vars);
-
-        for var in vars.iter_mut() {
-            if let Some(existing) = existing_vars.iter().find(|v| v.path == var.path) {
-                if var.value != existing.value {
-                    var.value = existing.value.clone();
-                    var.status = ItemStatus::Modified;
-                }
-            } else {
-                var.status = ItemStatus::MissingFromActive;
-            }
-        }
-        
-        // Find keys in active that are not in template
-        let mut to_add = Vec::new();
-        for existing in existing_vars {
-            if !vars.iter().any(|v| v.path == existing.path) {
-                let mut new_item = existing.clone();
-                new_item.status = ItemStatus::MissingFromTemplate;
-                new_item.template_value = None;
-                new_item.default_value = None;
-                to_add.push(new_item);
-            }
-        }
-        
-        // Basic insertion logic for extra keys (could be improved to insert at correct depth/position)
-        vars.extend(to_add);
-
-        Ok(())
-    }
-
     fn write(&self, path: &Path, vars: &[ConfigItem]) -> io::Result<()> {
         let mut root = Value::Object(Map::new());
         for var in vars {

@@ -10,7 +10,6 @@ pub mod properties;
 pub enum ItemStatus {
     Present,
     MissingFromActive,
-    MissingFromTemplate,
     Modified,
 }
 
@@ -48,7 +47,41 @@ pub enum FormatType {
 
 pub trait FormatHandler {
     fn parse(&self, path: &Path) -> io::Result<Vec<ConfigItem>>;
-    fn merge(&self, path: &Path, vars: &mut Vec<ConfigItem>) -> io::Result<()>;
+    fn merge(&self, path: &Path, vars: &mut Vec<ConfigItem>) -> io::Result<()> {
+        if !path.exists() {
+            return Ok(());
+        }
+
+        let template_vars = self.parse(path).unwrap_or_default();
+
+        for var in vars.iter_mut() {
+            if let Some(template_var) = template_vars.iter().find(|v| v.path == var.path) {
+                var.template_value = template_var.value.clone();
+                var.default_value = template_var.value.clone();
+                
+                if var.value != template_var.value {
+                    var.status = ItemStatus::Modified;
+                } else {
+                    var.status = ItemStatus::Present;
+                }
+            } else {
+                // Exists in active, but not in template
+                var.status = ItemStatus::Present;
+            }
+        }
+        
+        // Add items from template that are missing in active
+        for template_var in template_vars {
+            if !vars.iter().any(|v| v.path == template_var.path) {
+                let mut new_item = template_var.clone();
+                new_item.status = ItemStatus::MissingFromActive;
+                new_item.value = None;
+                vars.push(new_item);
+            }
+        }
+
+        Ok(())
+    }
     fn write(&self, path: &Path, vars: &[ConfigItem]) -> io::Result<()>;
 }
 

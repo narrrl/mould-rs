@@ -61,38 +61,6 @@ impl FormatHandler for PropertiesHandler {
         Ok(vars)
     }
 
-    fn merge(&self, path: &Path, vars: &mut Vec<ConfigItem>) -> io::Result<()> {
-        if !path.exists() {
-            return Ok(());
-        }
-
-        let existing_vars = self.parse(path).unwrap_or_default();
-
-        for var in vars.iter_mut() {
-            if let Some(existing) = existing_vars.iter().find(|v| v.path == var.path) {
-                if var.value != existing.value {
-                    var.value = existing.value.clone();
-                    var.status = ItemStatus::Modified;
-                }
-            } else {
-                var.status = ItemStatus::MissingFromActive;
-            }
-        }
-        
-        // Add items from active that are not in template
-        for existing in existing_vars {
-            if !vars.iter().any(|v| v.path == existing.path) {
-                let mut new_item = existing.clone();
-                new_item.status = ItemStatus::MissingFromTemplate;
-                new_item.template_value = None;
-                new_item.default_value = None;
-                vars.push(new_item);
-            }
-        }
-
-        Ok(vars.sort_by(|a, b| a.path.cmp(&b.path)))
-    }
-
     fn write(&self, path: &Path, vars: &[ConfigItem]) -> io::Result<()> {
         let mut props = HashMap::new();
         for var in vars {
