@@ -244,6 +244,9 @@ impl App {
     pub fn enter_insert(&mut self, variant: InsertVariant) {
         if let Some(var) = self.vars.get(self.selected)
             && !var.is_group {
+                if !matches!(variant, InsertVariant::Substitute) {
+                    self.sync_input_with_selected();
+                }
                 self.mode = Mode::Insert;
                 match variant {
                     InsertVariant::Start => {
@@ -337,9 +340,9 @@ impl App {
     }
 
     /// Adds a new item relative to the selected item.
-    pub fn add_item(&mut self, after: bool, is_group: bool) {
+    pub fn add_item(&mut self, after: bool, is_group: bool, as_child: bool) {
         if self.vars.is_empty() {
-            let new_key = "NEW_VAR".to_string();
+            let new_key = if is_group { "NEW_GROUP".to_string() } else { "NEW_VAR".to_string() };
             self.vars.push(ConfigItem {
                 key: new_key.clone(),
                 path: vec![PathSegment::Key(new_key)],
@@ -370,8 +373,8 @@ impl App {
         let insert_pos;
         let mut is_array_item = false;
 
-        if let Some(PathSegment::Index(idx)) = selected_item.path.last() {
-            // ARRAY ITEM LOGIC
+        if !as_child && let Some(PathSegment::Index(idx)) = selected_item.path.last() {
+            // ARRAY ITEM LOGIC (Adding sibling to an existing index)
             is_array_item = true;
             let base_path = selected_item.path[..selected_item.path.len() - 1].to_vec();
             let new_idx = if after { idx + 1 } else { *idx };
@@ -392,11 +395,29 @@ impl App {
             new_path = base_path;
             new_path.push(PathSegment::Index(new_idx));
             new_depth = selected_item.depth;
-        } else if after && selected_item.is_group {
+        } else if as_child && selected_item.is_group {
             // ADD AS CHILD OF GROUP
             insert_pos = self.selected + 1;
             new_path = selected_item.path.clone();
             new_depth = selected_item.depth + 1;
+            
+            // Check if this group already contains array items
+            if self.is_array_group(&selected_item.path) {
+                is_array_item = true;
+                let new_idx = 0; // Prepend to array
+                new_path.push(PathSegment::Index(new_idx));
+                
+                // Shift existing children
+                for var in self.vars.iter_mut() {
+                    if var.path.starts_with(&selected_item.path) && var.path.len() > selected_item.path.len()
+                        && let PathSegment::Index(i) = var.path[selected_item.path.len()] {
+                            var.path[selected_item.path.len()] = PathSegment::Index(i + 1);
+                            if var.path.len() == selected_item.path.len() + 1 {
+                                var.key = format!("[{}]", i + 1);
+                            }
+                        }
+                }
+            }
         } else {
             // ADD AS SIBLING
             let parent_path = if selected_item.path.len() > 1 {
@@ -417,6 +438,17 @@ impl App {
             
             new_path = parent_path;
             new_depth = selected_item.depth;
+            
+            // If the parent is an array group, this is also an array item
+            if !new_path.is_empty() && self.is_array_group(&new_path) {
+                is_array_item = true;
+                if let Some(PathSegment::Index(idx)) = selected_item.path.last() {
+                    let new_idx = if after { idx + 1 } else { *idx };
+                    new_path.push(PathSegment::Index(new_idx));
+                } else {
+                    new_path.push(PathSegment::Index(0));
+                }
+            }
         }
 
         // 2. Generate a unique key for non-array items
@@ -458,9 +490,10 @@ impl App {
 
         self.vars.insert(insert_pos, new_item);
         self.selected = insert_pos;
+        self.save_undo_state();
+        
         if is_array_item {
             self.sync_input_with_selected();
-            self.save_undo_state();
             self.enter_insert(InsertVariant::Start);
         } else {
             self.enter_insert_key();
@@ -493,6 +526,14 @@ impl App {
     /// Status bar helpers
     pub fn selected_is_group(&self) -> bool {
         self.vars.get(self.selected).map(|v| v.is_group).unwrap_or(false)
+    }
+
+    pub fn is_array_group(&self, group_path: &[PathSegment]) -> bool {
+        self.vars.iter().any(|v| 
+            v.path.starts_with(group_path) 
+            && v.path.len() == group_path.len() + 1 
+            && matches!(v.path.last(), Some(PathSegment::Index(_)))
+        )
     }
 
     pub fn selected_is_array(&self) -> bool {

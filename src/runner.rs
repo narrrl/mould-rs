@@ -179,14 +179,14 @@ where
                     "previous_match" => self.app.jump_previous_match(),
                     "jump_top" => self.app.jump_top(),
                     "jump_bottom" => self.app.jump_bottom(),
-                    "append_item" => self.app.add_item(true, false),
-                    "prepend_item" => self.app.add_item(false, false),
+                    "append_item" => self.app.add_item(true, false, false),
+                    "prepend_item" => self.app.add_item(false, false, false),
                     "delete_item" => self.app.delete_selected(),
                     "undo" => self.app.undo(),
                     "redo" => self.app.redo(),
                     "rename" => self.app.enter_insert_key(),
-                    "append_group" => self.app.add_item(true, true),
-                    "prepend_group" => self.app.add_item(false, true),
+                    "append_group" => self.app.add_item(true, true, true),
+                    "prepend_group" => self.app.add_item(false, true, true),
                     "toggle_group" => {
                         self.app.toggle_group_selected();
                         self.app.save_undo_state();
