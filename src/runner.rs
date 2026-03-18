@@ -163,13 +163,12 @@ where
                     "previous_match" => self.app.jump_previous_match(),
                     "jump_top" => self.app.jump_top(),
                     "jump_bottom" => self.app.jump_bottom(),
-                    "append_item" => self.app.add_array_item(true),
-                    "prepend_item" => self.app.add_array_item(false),
+                    "append_item" => self.app.add_item(true),
+                    "prepend_item" => self.app.add_item(false),
                     "delete_item" => self.app.delete_selected(),
                     "undo" => self.app.undo(),
                     "redo" => self.app.redo(),
                     "add_missing" => {
-                        self.app.save_undo_state();
                         self.add_missing_item();
                     }
                     "command" => {
@@ -207,6 +206,7 @@ where
                     var.value = var.template_value.clone();
                 }
                 self.app.sync_input_with_selected();
+                self.app.save_undo_state();
             }
     }
 

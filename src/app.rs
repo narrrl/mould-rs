@@ -163,7 +163,6 @@ impl App {
     pub fn enter_insert(&mut self, variant: InsertVariant) {
         if let Some(var) = self.vars.get(self.selected)
             && !var.is_group {
-                self.save_undo_state();
                 self.mode = Mode::Insert;
                 match variant {
                     InsertVariant::Start => {
@@ -184,6 +183,7 @@ impl App {
     /// Commits the current input and transitions the application into Normal Mode.
     pub fn enter_normal(&mut self) {
         self.commit_input();
+        self.save_undo_state();
         self.mode = Mode::Normal;
     }
 
@@ -193,7 +193,6 @@ impl App {
             return;
         }
 
-        self.save_undo_state();
         let selected_path = self.vars[self.selected].path.clone();
         let is_group = self.vars[self.selected].is_group;
 
@@ -245,67 +244,129 @@ impl App {
             self.selected = self.vars.len() - 1;
         }
         self.sync_input_with_selected();
+        self.save_undo_state();
     }
 
-    /// Adds a new item to an array if the selected item is part of one.
-    pub fn add_array_item(&mut self, after: bool) {
+    /// Adds a new item relative to the selected item.
+    pub fn add_item(&mut self, after: bool) {
         if self.vars.is_empty() {
+            let new_key = "NEW_VAR".to_string();
+            self.vars.push(ConfigItem {
+                key: new_key.clone(),
+                path: vec![PathSegment::Key(new_key)],
+                value: Some("".to_string()),
+                template_value: None,
+                default_value: None,
+                depth: 0,
+                is_group: false,
+                status: crate::format::ItemStatus::Modified,
+                value_type: crate::format::ValueType::String,
+            });
+            self.selected = 0;
+            self.sync_input_with_selected();
+            self.save_undo_state();
+            self.enter_insert(InsertVariant::Start);
             return;
         }
 
-        self.save_undo_state();
-        let (base_path, idx, depth) = {
-            let selected_item = &self.vars[self.selected];
-            if selected_item.is_group {
-                return;
-            }
-            let path = &selected_item.path;
+        let selected_item = self.vars[self.selected].clone();
+        
+        // 1. Determine new item properties (path, key, depth, position)
+        let mut new_path;
+        let new_depth;
+        let insert_pos;
+        let mut is_array_item = false;
+
+        if let Some(PathSegment::Index(idx)) = selected_item.path.last() {
+            // ARRAY ITEM LOGIC
+            is_array_item = true;
+            let base_path = selected_item.path[..selected_item.path.len() - 1].to_vec();
+            let new_idx = if after { idx + 1 } else { *idx };
+            insert_pos = if after { self.selected + 1 } else { self.selected };
             
-            if let Some(PathSegment::Index(idx)) = path.last() {
-                (path[..path.len() - 1].to_vec(), *idx, selected_item.depth)
-            } else {
-                return;
-            }
-        };
-
-        let new_idx = if after { idx + 1 } else { idx };
-        let insert_pos = if after {
-            self.selected + 1
-        } else {
-            self.selected
-        };
-
-        // 1. Shift all items in this array that have index >= new_idx
-        for var in self.vars.iter_mut() {
-            if var.path.starts_with(&base_path) && var.path.len() > base_path.len()
-                && let PathSegment::Index(i) = var.path[base_path.len()]
-                    && i >= new_idx {
-                        var.path[base_path.len()] = PathSegment::Index(i + 1);
-                        if var.path.len() == base_path.len() + 1 {
-                            var.key = format!("[{}]", i + 1);
+            // Shift subsequent indices
+            for var in self.vars.iter_mut() {
+                if var.path.starts_with(&base_path) && var.path.len() > base_path.len()
+                    && let PathSegment::Index(i) = var.path[base_path.len()]
+                        && i >= new_idx {
+                            var.path[base_path.len()] = PathSegment::Index(i + 1);
+                            if var.path.len() == base_path.len() + 1 {
+                                var.key = format!("[{}]", i + 1);
+                            }
                         }
-                    }
+            }
+            
+            new_path = base_path;
+            new_path.push(PathSegment::Index(new_idx));
+            new_depth = selected_item.depth;
+        } else if after && selected_item.is_group {
+            // ADD AS CHILD OF GROUP
+            insert_pos = self.selected + 1;
+            new_path = selected_item.path.clone();
+            new_depth = selected_item.depth + 1;
+        } else {
+            // ADD AS SIBLING
+            let parent_path = if selected_item.path.len() > 1 {
+                selected_item.path[..selected_item.path.len() - 1].to_vec()
+            } else {
+                Vec::new()
+            };
+            
+            insert_pos = if after {
+                let mut p = self.selected + 1;
+                while p < self.vars.len() && self.vars[p].path.starts_with(&selected_item.path) {
+                    p += 1;
+                }
+                p
+            } else {
+                self.selected
+            };
+            
+            new_path = parent_path;
+            new_depth = selected_item.depth;
         }
 
-        // 2. Insert new item
-        let mut new_path = base_path;
-        new_path.push(PathSegment::Index(new_idx));
-        
+        // 2. Generate a unique key for non-array items
+        let final_key = if is_array_item {
+            if let Some(PathSegment::Index(idx)) = new_path.last() {
+                format!("[{}]", idx)
+            } else {
+                "NEW_VAR".to_string()
+            }
+        } else {
+            let mut count = 1;
+            let mut candidate = "NEW_VAR".to_string();
+            let parent_path_slice = new_path.as_slice();
+            
+            while self.vars.iter().any(|v| {
+                v.path.starts_with(parent_path_slice) 
+                && v.path.len() == parent_path_slice.len() + 1 
+                && v.key == candidate
+            }) {
+                candidate = format!("NEW_VAR_{}", count);
+                count += 1;
+            }
+            new_path.push(PathSegment::Key(candidate.clone()));
+            candidate
+        };
+
+        // 3. Insert new item
         let new_item = ConfigItem {
-            key: format!("[{}]", new_idx),
+            key: final_key,
             path: new_path,
             value: Some("".to_string()),
             template_value: None,
             default_value: None,
-            depth,
+            depth: new_depth,
             is_group: false,
             status: crate::format::ItemStatus::Modified,
             value_type: crate::format::ValueType::String,
         };
-        
+
         self.vars.insert(insert_pos, new_item);
         self.selected = insert_pos;
         self.sync_input_with_selected();
+        self.save_undo_state();
         self.enter_insert(InsertVariant::Start);
         self.status_message = None;
     }

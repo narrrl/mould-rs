@@ -83,10 +83,11 @@ impl UndoTree {
             return self.nodes.get(&next_id).map(|n| &n.action);
         } else {
             // Fallback: if there is no recorded latest branch but there are children
-            if let Some(current) = self.nodes.get(&self.current_node)
+            let current_id = self.current_node;
+            if let Some(current) = self.nodes.get(&current_id)
                 && let Some(&first_child_id) = current.children.last() {
                     self.current_node = first_child_id;
-                    self.latest_branch.insert(self.current_node, first_child_id);
+                    self.latest_branch.insert(current_id, first_child_id);
                     return self.nodes.get(&first_child_id).map(|n| &n.action);
                 }
         }
@@ -144,16 +145,43 @@ mod tests {
         assert_eq!(action.state[0].key, "B");
         assert_eq!(action.selected, 1);
 
-        // Branching: Push State 4 (from State 2)
+        // Redo -> State 3
+        let action = tree.redo().unwrap();
+        assert_eq!(action.state[0].key, "C");
+        assert_eq!(action.selected, 2);
+
+        // Branching: Undo twice to State 1
+        tree.undo();
+        tree.undo();
+        
+        // Push State 4 (from State 1)
         let state4 = vec![dummy_item("D")];
         tree.push(state4.clone(), 3);
 
-        // Undo -> State 2
+        // Undo -> State 1
         let action = tree.undo().unwrap();
-        assert_eq!(action.state[0].key, "B");
+        assert_eq!(action.state[0].key, "A");
 
-        // Redo -> State 4 (follows latest branch D, not old branch C)
+        // Redo -> State 4 (follows latest branch D, not old branch B)
         let action = tree.redo().unwrap();
         assert_eq!(action.state[0].key, "D");
+    }
+
+    #[test]
+    fn test_redo_fallback_fix() {
+        let state1 = vec![dummy_item("A")];
+        let mut tree = UndoTree::new(state1.clone(), 0);
+
+        let state2 = vec![dummy_item("B")];
+        tree.push(state2.clone(), 1);
+
+        tree.undo();
+        // Redo should move to state 2
+        let action = tree.redo().unwrap();
+        assert_eq!(action.state[0].key, "B");
+
+        // Calling redo again should NOT change the current node or returned action
+        // (since it's already at the latest child)
+        assert!(tree.redo().is_none());
     }
 }
