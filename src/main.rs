@@ -6,6 +6,7 @@ mod format;
 mod runner;
 mod ui;
 mod resolver;
+mod undo;
 
 use app::App;
 use config::load_config;

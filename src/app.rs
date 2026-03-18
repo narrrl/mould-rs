@@ -1,5 +1,6 @@
 use crate::format::{ConfigItem, PathSegment};
 use tui_input::Input;
+use crate::undo::UndoTree;
 
 /// Represents the current operating mode of the application.
 pub enum Mode {
@@ -33,14 +34,15 @@ pub struct App {
     pub input: Input,
     /// The current search query for filtering keys.
     pub search_query: String,
-    /// Stack of previous variable states for undo functionality.
-    pub undo_stack: Vec<Vec<ConfigItem>>,
+    /// Undo history structured as a tree
+    pub undo_tree: UndoTree,
 }
 
 impl App {
     /// Initializes a new application instance with the provided variables.
     pub fn new(vars: Vec<ConfigItem>) -> Self {
         let initial_input = vars.first().and_then(|v| v.value.clone()).unwrap_or_default();
+        let undo_tree = UndoTree::new(vars.clone(), 0);
         Self {
             vars,
             selected: 0,
@@ -49,7 +51,7 @@ impl App {
             status_message: None,
             input: Input::new(initial_input),
             search_query: String::new(),
-            undo_stack: Vec::new(),
+            undo_tree,
         }
     }
 
@@ -325,18 +327,16 @@ impl App {
             .unwrap_or(false)
     }
 
-    /// Saves the current state of variables to the undo stack.
+    /// Saves the current state of variables to the undo tree.
     pub fn save_undo_state(&mut self) {
-        self.undo_stack.push(self.vars.clone());
-        if self.undo_stack.len() > 50 {
-            self.undo_stack.remove(0);
-        }
+        self.undo_tree.push(self.vars.clone(), self.selected);
     }
 
-    /// Reverts to the last saved state of variables.
+    /// Reverts to the previous state in the undo tree.
     pub fn undo(&mut self) {
-        if let Some(previous_vars) = self.undo_stack.pop() {
-            self.vars = previous_vars;
+        if let Some(action) = self.undo_tree.undo() {
+            self.vars = action.state.clone();
+            self.selected = action.selected;
             if self.selected >= self.vars.len() && !self.vars.is_empty() {
                 self.selected = self.vars.len() - 1;
             }
@@ -344,6 +344,21 @@ impl App {
             self.status_message = Some("Undo applied".to_string());
         } else {
             self.status_message = Some("Nothing to undo".to_string());
+        }
+    }
+
+    /// Advances to the next state in the undo tree.
+    pub fn redo(&mut self) {
+        if let Some(action) = self.undo_tree.redo() {
+            self.vars = action.state.clone();
+            self.selected = action.selected;
+            if self.selected >= self.vars.len() && !self.vars.is_empty() {
+                self.selected = self.vars.len() - 1;
+            }
+            self.sync_input_with_selected();
+            self.status_message = Some("Redo applied".to_string());
+        } else {
+            self.status_message = Some("Nothing to redo".to_string());
         }
     }
 }

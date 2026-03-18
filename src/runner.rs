@@ -128,6 +128,7 @@ where
                 (&self.config.keybinds.prepend_item, "prepend_item"),
                 (&self.config.keybinds.delete_item, "delete_item"),
                 (&self.config.keybinds.undo, "undo"),
+                (&self.config.keybinds.redo, "redo"),
                 (&"a".to_string(), "add_missing"),
                 (&":".to_string(), "command"),
                 (&"q".to_string(), "quit"),
@@ -166,6 +167,7 @@ where
                     "prepend_item" => self.app.add_array_item(false),
                     "delete_item" => self.app.delete_selected(),
                     "undo" => self.app.undo(),
+                    "redo" => self.app.redo(),
                     "add_missing" => {
                         self.app.save_undo_state();
                         self.add_missing_item();

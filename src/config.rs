@@ -120,16 +120,17 @@ pub struct KeybindsConfig {
     pub prepend_item: String,
     pub delete_item: String,
     pub undo: String,
-}
+    pub redo: String,
+    }
 
-impl Default for KeybindsConfig {
+    impl Default for KeybindsConfig {
     fn default() -> Self {
         Self {
             down: "j".to_string(),
             up: "k".to_string(),
             edit: "i".to_string(),
-            edit_append: "A".to_string(),
-            edit_substitute: "S".to_string(),
+            edit_append: "a".to_string(),
+            edit_substitute: "s".to_string(),
             save: ":w".to_string(),
             quit: ":q".to_string(),
             normal_mode: "Esc".to_string(),
@@ -142,9 +143,10 @@ impl Default for KeybindsConfig {
             prepend_item: "O".to_string(),
             delete_item: "dd".to_string(),
             undo: "u".to_string(),
+            redo: "U".to_string(),
         }
     }
-}
+    }
 
 /// Root configuration structure for mould.
 #[derive(Debug, Deserialize, Serialize, Default, Clone)]

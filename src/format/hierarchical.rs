@@ -125,14 +125,13 @@ fn json_to_xml(value: &Value) -> String {
     let mut writer = Writer::new_with_indent(Vec::new(), b' ', 4);
     
     fn write_recursive(writer: &mut Writer<Vec<u8>>, value: &Value, key_name: Option<&str>) {
-        if let Some(k) = key_name {
-            if k == "$text" {
+        if let Some(k) = key_name
+            && k == "$text" {
                 if let Some(s) = value.as_str() {
                     writer.write_event(Event::Text(BytesText::new(s))).unwrap();
                 }
                 return;
             }
-        }
         
         match value {
             Value::Object(map) => {
