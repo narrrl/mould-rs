@@ -3,6 +3,8 @@ use std::path::Path;
 
 pub mod env;
 pub mod hierarchical;
+pub mod ini;
+pub mod properties;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ItemStatus {
@@ -39,6 +41,9 @@ pub enum FormatType {
     Json,
     Yaml,
     Toml,
+    Xml,
+    Ini,
+    Properties,
 }
 
 pub trait FormatHandler {
@@ -54,6 +59,9 @@ pub fn detect_format(path: &Path, override_format: Option<String>) -> FormatType
             "json" => return FormatType::Json,
             "yaml" | "yml" => return FormatType::Yaml,
             "toml" => return FormatType::Toml,
+            "xml" => return FormatType::Xml,
+            "ini" => return FormatType::Ini,
+            "properties" => return FormatType::Properties,
             _ => {}
         }
     }
@@ -65,6 +73,12 @@ pub fn detect_format(path: &Path, override_format: Option<String>) -> FormatType
         FormatType::Yaml
     } else if file_name.ends_with(".toml") {
         FormatType::Toml
+    } else if file_name.ends_with(".xml") {
+        FormatType::Xml
+    } else if file_name.ends_with(".ini") {
+        FormatType::Ini
+    } else if file_name.ends_with(".properties") {
+        FormatType::Properties
     } else {
         FormatType::Env
     }
@@ -76,5 +90,8 @@ pub fn get_handler(format: FormatType) -> Box<dyn FormatHandler> {
         FormatType::Json => Box::new(hierarchical::HierarchicalHandler::new(FormatType::Json)),
         FormatType::Yaml => Box::new(hierarchical::HierarchicalHandler::new(FormatType::Yaml)),
         FormatType::Toml => Box::new(hierarchical::HierarchicalHandler::new(FormatType::Toml)),
+        FormatType::Xml => Box::new(hierarchical::HierarchicalHandler::new(FormatType::Xml)),
+        FormatType::Ini => Box::new(ini::IniHandler),
+        FormatType::Properties => Box::new(properties::PropertiesHandler),
     }
 }

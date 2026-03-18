@@ -1,12 +1,13 @@
 # mould
 
-mould is a modern Terminal User Interface (TUI) tool designed for interactively generating and editing configuration files from templates. Whether you are setting up a `.env` file from an example, creating a `docker-compose.override.yml`, or editing nested `JSON`, `YAML`, or `TOML` configurations, mould provides a fast, Vim-inspired workflow to get your environment ready.
+mould is a modern Terminal User Interface (TUI) tool designed for interactively generating and editing configuration files from templates. Whether you are setting up a `.env` file from an example, creating a `docker-compose.override.yml`, or editing nested `JSON`, `YAML`, `TOML`, `XML`, `INI`, or `Properties` configurations, mould provides a fast, Vim-inspired workflow to get your environment ready.
 
 ## Features
 
-- **Universal Format Support**: Handle `.env`, `JSON`, `YAML`, and `TOML` seamlessly.
-- **Tree View Navigation**: Edit nested data structures (JSON, YAML, TOML) in a beautiful, depth-colored tree view.
-- **Smart Template Comparison**: Automatically discovers `.env.example` vs `.env` relationships and highlights missing or modified keys.
+- **Universal Format Support**: Handle `.env`, `JSON`, `YAML`, `TOML`, `XML`, `INI`, and `Properties` seamlessly.
+- **Tree View Navigation**: Edit nested data structures in a beautiful, depth-colored tree view.
+- **Smart Template Discovery**: Rule-based resolver automatically discovers relationships (e.g., `.env.example` vs `.env`, `config.template.properties` vs `config.properties`) and highlights differences.
+- **Strict Type Preservation**: Intelligently preserves data types (integers, booleans, strings) during edit-save cycles, ensuring your configuration stays valid.
 - **Add Missing Keys**: Instantly pull missing keys and their default values from your template into your active configuration with a single keystroke.
 - **Neovim Integration**: Comes with a built-in Neovim plugin for seamless in-editor configuration management.
 - **Docker Compose Integration**: Automatically generate `docker-compose.override.yml` from `docker-compose.yml`.

@@ -24,6 +24,12 @@ pub const RULES: &[Rule] = &[
     Rule { template_suffix: ".template.yaml", active_suffix: ".yaml", is_exact_match: false },
     Rule { template_suffix: ".example.toml", active_suffix: ".toml", is_exact_match: false },
     Rule { template_suffix: ".template.toml", active_suffix: ".toml", is_exact_match: false },
+    Rule { template_suffix: ".example.xml", active_suffix: ".xml", is_exact_match: false },
+    Rule { template_suffix: ".template.xml", active_suffix: ".xml", is_exact_match: false },
+    Rule { template_suffix: ".example.ini", active_suffix: ".ini", is_exact_match: false },
+    Rule { template_suffix: ".template.ini", active_suffix: ".ini", is_exact_match: false },
+    Rule { template_suffix: ".example.properties", active_suffix: ".properties", is_exact_match: false },
+    Rule { template_suffix: ".template.properties", active_suffix: ".properties", is_exact_match: false },
 ];
 
 pub const DEFAULT_CANDIDATES: &[&str] = &[
