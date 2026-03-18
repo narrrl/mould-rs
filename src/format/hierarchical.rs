@@ -1,7 +1,6 @@
 use super::{ConfigItem, FormatHandler, FormatType, ItemStatus, ValueType};
 use serde_json::{Map, Value};
 use std::fs;
-use std::io;
 use std::path::Path;
 
 pub struct HierarchicalHandler {
@@ -13,50 +12,40 @@ impl HierarchicalHandler {
         Self { format_type }
     }
 
-    fn read_value(&self, path: &Path) -> io::Result<Value> {
+    fn read_value(&self, path: &Path) -> anyhow::Result<Value> {
         let content = fs::read_to_string(path)?;
         let value = match self.format_type {
-            FormatType::Json => serde_json::from_str(&content)
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
-            FormatType::Yaml => serde_yaml::from_str(&content)
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
-            FormatType::Toml => toml::from_str(&content)
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
-            FormatType::Xml => xml_to_json(&content)
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
+            FormatType::Json => serde_json::from_str(&content)?,
+            FormatType::Yaml => serde_yaml::from_str(&content)?,
+            FormatType::Toml => toml::from_str(&content)?,
+            FormatType::Xml => xml_to_json(&content)?,
             _ => unreachable!(),
         };
         Ok(value)
     }
 
-    fn write_value(&self, path: &Path, value: &Value) -> io::Result<()> {
+    fn write_value(&self, path: &Path, value: &Value) -> anyhow::Result<()> {
         let content = match self.format_type {
-            FormatType::Json => serde_json::to_string_pretty(value)
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
-            FormatType::Yaml => serde_yaml::to_string(value)
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
+            FormatType::Json => serde_json::to_string_pretty(value)?,
+            FormatType::Yaml => serde_yaml::to_string(value)?,
             FormatType::Toml => {
                 // toml requires the root to be a table
                 if value.is_object() {
-                    let toml_value: toml::Value = serde_json::from_value(value.clone())
-                        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-                    toml::to_string_pretty(&toml_value)
-                        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
+                    let toml_value: toml::Value = serde_json::from_value(value.clone())?;
+                    toml::to_string_pretty(&toml_value)?
                 } else {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "Root of TOML must be an object",
-                    ));
+                    anyhow::bail!("Root of TOML must be an object");
                 }
             }
             FormatType::Xml => json_to_xml(value),
             _ => unreachable!(),
         };
-        fs::write(path, content)
+        fs::write(path, content)?;
+        Ok(())
     }
 }
 
-fn xml_to_json(content: &str) -> io::Result<Value> {
+fn xml_to_json(content: &str) -> anyhow::Result<Value> {
     use quick_xml::reader::Reader;
     use quick_xml::events::Event;
 
@@ -64,7 +53,7 @@ fn xml_to_json(content: &str) -> io::Result<Value> {
     reader.config_mut().trim_text(true);
     let mut buf = Vec::new();
     
-    fn parse_recursive(reader: &mut Reader<&[u8]>) -> io::Result<Value> {
+    fn parse_recursive(reader: &mut Reader<&[u8]>) -> anyhow::Result<Value> {
         let mut map = Map::new();
         let mut text = String::new();
         let mut buf = Vec::new();
@@ -276,14 +265,14 @@ fn flatten(value: &Value, prefix: &str, depth: usize, key_name: &str, vars: &mut
 }
 
 impl FormatHandler for HierarchicalHandler {
-    fn parse(&self, path: &Path) -> io::Result<Vec<ConfigItem>> {
+    fn parse(&self, path: &Path) -> anyhow::Result<Vec<ConfigItem>> {
         let value = self.read_value(path)?;
         let mut vars = Vec::new();
         flatten(&value, "", 0, "", &mut vars);
         Ok(vars)
     }
 
-    fn write(&self, path: &Path, vars: &[ConfigItem]) -> io::Result<()> {
+    fn write(&self, path: &Path, vars: &[ConfigItem]) -> anyhow::Result<()> {
         let mut root = Value::Object(Map::new());
         for var in vars {
             if !var.is_group {

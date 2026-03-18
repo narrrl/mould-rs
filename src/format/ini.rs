@@ -1,14 +1,12 @@
 use super::{ConfigItem, FormatHandler, ItemStatus, ValueType};
 use ini::Ini;
-use std::io;
 use std::path::Path;
 
 pub struct IniHandler;
 
 impl FormatHandler for IniHandler {
-    fn parse(&self, path: &Path) -> io::Result<Vec<ConfigItem>> {
-        let conf = Ini::load_from_file(path)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    fn parse(&self, path: &Path) -> anyhow::Result<Vec<ConfigItem>> {
+        let conf = Ini::load_from_file(path)?;
         let mut vars = Vec::new();
 
         for (section, prop) in &conf {
@@ -52,7 +50,7 @@ impl FormatHandler for IniHandler {
         Ok(vars)
     }
 
-    fn write(&self, path: &Path, vars: &[ConfigItem]) -> io::Result<()> {
+    fn write(&self, path: &Path, vars: &[ConfigItem]) -> anyhow::Result<()> {
         let mut conf = Ini::new();
         for var in vars {
             if !var.is_group {
@@ -67,8 +65,8 @@ impl FormatHandler for IniHandler {
                 }
             }
         }
-        conf.write_to_file(path)
-            .map_err(io::Error::other)
+        conf.write_to_file(path)?;
+        Ok(())
     }
 }
 

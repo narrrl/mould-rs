@@ -1,13 +1,13 @@
 use super::{ConfigItem, FormatHandler, ItemStatus, ValueType};
 use java_properties::{LineContent, PropertiesIter, PropertiesWriter};
 use std::fs::File;
-use std::io::{self, BufReader, BufWriter};
+use std::io::{BufReader, BufWriter};
 use std::path::Path;
 
 pub struct PropertiesHandler;
 
 impl FormatHandler for PropertiesHandler {
-    fn parse(&self, path: &Path) -> io::Result<Vec<ConfigItem>> {
+    fn parse(&self, path: &Path) -> anyhow::Result<Vec<ConfigItem>> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
         let iter = PropertiesIter::new(reader);
@@ -16,7 +16,7 @@ impl FormatHandler for PropertiesHandler {
         let mut groups = std::collections::HashSet::new();
 
         for line_result in iter {
-            let line = line_result.map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+            let line = line_result?;
             
             if let LineContent::KVPair(path, value) = line.consume_content() {
                 // Add groups based on dot notation
@@ -62,7 +62,7 @@ impl FormatHandler for PropertiesHandler {
         Ok(vars)
     }
 
-    fn write(&self, path: &Path, vars: &[ConfigItem]) -> io::Result<()> {
+    fn write(&self, path: &Path, vars: &[ConfigItem]) -> anyhow::Result<()> {
         let file = File::create(path)?;
         let writer = BufWriter::new(file);
         let mut prop_writer = PropertiesWriter::new(writer);
@@ -72,12 +72,12 @@ impl FormatHandler for PropertiesHandler {
                 let val = var.value.as_deref()
                     .or(var.template_value.as_deref())
                     .unwrap_or("");
-                prop_writer.write(&var.path, val)
-                    .map_err(io::Error::other)?;
+                prop_writer.write(&var.path, val)?;
             }
         }
 
-        prop_writer.finish().map_err(io::Error::other)
+        prop_writer.finish()?;
+        Ok(())
     }
 }
 

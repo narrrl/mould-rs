@@ -1,4 +1,3 @@
-use std::io;
 use std::path::Path;
 
 pub mod env;
@@ -46,8 +45,8 @@ pub enum FormatType {
 }
 
 pub trait FormatHandler {
-    fn parse(&self, path: &Path) -> io::Result<Vec<ConfigItem>>;
-    fn merge(&self, path: &Path, vars: &mut Vec<ConfigItem>) -> io::Result<()> {
+    fn parse(&self, path: &Path) -> anyhow::Result<Vec<ConfigItem>>;
+    fn merge(&self, path: &Path, vars: &mut Vec<ConfigItem>) -> anyhow::Result<()> {
         if !path.exists() {
             return Ok(());
         }
@@ -82,7 +81,7 @@ pub trait FormatHandler {
 
         Ok(())
     }
-    fn write(&self, path: &Path, vars: &[ConfigItem]) -> io::Result<()>;
+    fn write(&self, path: &Path, vars: &[ConfigItem]) -> anyhow::Result<()>;
 }
 
 pub fn detect_format(path: &Path, override_format: Option<String>) -> FormatType {

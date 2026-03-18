@@ -1,12 +1,12 @@
 use super::{ConfigItem, FormatHandler, ItemStatus, ValueType};
 use std::fs;
-use std::io::{self, Write};
+use std::io::Write;
 use std::path::Path;
 
 pub struct EnvHandler;
 
 impl FormatHandler for EnvHandler {
-    fn parse(&self, path: &Path) -> io::Result<Vec<ConfigItem>> {
+    fn parse(&self, path: &Path) -> anyhow::Result<Vec<ConfigItem>> {
         let content = fs::read_to_string(path)?;
         let mut vars = Vec::new();
 
@@ -35,7 +35,7 @@ impl FormatHandler for EnvHandler {
         Ok(vars)
     }
 
-    fn write(&self, path: &Path, vars: &[ConfigItem]) -> io::Result<()> {
+    fn write(&self, path: &Path, vars: &[ConfigItem]) -> anyhow::Result<()> {
         let mut file = fs::File::create(path)?;
         for var in vars {
             if !var.is_group {
