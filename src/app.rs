@@ -242,8 +242,10 @@ impl App {
 
     /// Transitions the application into Insert Mode with a specific variant.
     pub fn enter_insert(&mut self, variant: InsertVariant) {
-        if let Some(var) = self.vars.get(self.selected)
-            && !var.is_group {
+        if let Some(var) = self.vars.get(self.selected) {
+            if var.is_group {
+                self.enter_insert_key();
+            } else {
                 if !matches!(variant, InsertVariant::Substitute) {
                     self.sync_input_with_selected();
                 }
@@ -262,6 +264,7 @@ impl App {
                     }
                 }
             }
+        }
     }
 
     /// Commits the current input and transitions the application into Normal Mode.

@@ -103,24 +103,30 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
                 Span::styled(&var.key, key_style),
             ];
 
-            // Add status indicator if not present (only for leaf variables)
-            if !var.is_group {
-                match var.status {
-                    crate::format::ItemStatus::MissingFromActive => {
-                        let missing_style = if is_selected {
-                            Style::default().fg(theme.fg_highlight()).add_modifier(Modifier::BOLD)
-                        } else {
-                            Style::default().fg(theme.fg_warning()).add_modifier(Modifier::BOLD)
-                        };
-                        key_spans.push(Span::styled(" (missing)", missing_style));
-                    }
-                    crate::format::ItemStatus::Modified => {
-                        if !is_selected {
-                            key_spans.push(Span::styled(" (*)", Style::default().fg(theme.fg_modified())));
-                        }
-                    }
-                    _ => {}
+            // Add status indicator if not present
+            match var.status {
+                crate::format::ItemStatus::MissingFromActive if !var.is_group => {
+                    let missing_style = if is_selected {
+                        Style::default().fg(theme.fg_highlight()).add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(theme.fg_warning()).add_modifier(Modifier::BOLD)
+                    };
+                    key_spans.push(Span::styled(" (missing)", missing_style));
                 }
+                crate::format::ItemStatus::MissingFromActive if var.is_group => {
+                    let missing_style = if is_selected {
+                        Style::default().fg(theme.fg_highlight()).add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(theme.fg_warning()).add_modifier(Modifier::BOLD)
+                    };
+                    key_spans.push(Span::styled(" (missing group)", missing_style));
+                }
+                crate::format::ItemStatus::Modified => {
+                    if !is_selected {
+                        key_spans.push(Span::styled(" (*)", Style::default().fg(theme.fg_modified())));
+                    }
+                }
+                _ => {}
             }
 
             let item_style = if is_selected {
@@ -210,7 +216,9 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
 
     // Show template value in normal mode if it differs
     let display_text = if let Some(var) = current_var {
-        if var.is_group {
+        if matches!(app.mode, Mode::InsertKey) {
+            input_text.to_string()
+        } else if var.is_group {
             "<group>".to_string()
         } else if matches!(app.mode, Mode::Normal) {
             format!("{}{}", input_text, extra_info)
