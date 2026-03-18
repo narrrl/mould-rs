@@ -1,4 +1,4 @@
-use super::{ConfigItem, FormatHandler, ItemStatus, ValueType};
+use super::{ConfigItem, FormatHandler, ItemStatus, ValueType, PathSegment};
 use java_properties::{LineContent, PropertiesIter, PropertiesWriter};
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
@@ -21,13 +21,10 @@ impl FormatHandler for PropertiesHandler {
             if let LineContent::KVPair(path, value) = line.consume_content() {
                 // Add groups based on dot notation
                 let parts: Vec<&str> = path.split('.').collect();
-                let mut current_path = String::new();
+                let mut current_path = Vec::new();
                 
                 for (i, part) in parts.iter().enumerate().take(parts.len().saturating_sub(1)) {
-                    if !current_path.is_empty() {
-                        current_path.push('.');
-                    }
-                    current_path.push_str(part);
+                    current_path.push(PathSegment::Key(part.to_string()));
                     
                     if groups.insert(current_path.clone()) {
                         vars.push(ConfigItem {
@@ -44,9 +41,13 @@ impl FormatHandler for PropertiesHandler {
                     }
                 }
 
+                let mut final_path = current_path.clone();
+                let last_key = parts.last().unwrap_or(&"").to_string();
+                final_path.push(PathSegment::Key(last_key.clone()));
+
                 vars.push(ConfigItem {
-                    key: parts.last().unwrap_or(&"").to_string(),
-                    path: path.clone(),
+                    key: last_key,
+                    path: final_path,
                     value: Some(value.clone()),
                     template_value: Some(value.clone()),
                     default_value: Some(value.clone()),
@@ -72,7 +73,7 @@ impl FormatHandler for PropertiesHandler {
                 let val = var.value.as_deref()
                     .or(var.template_value.as_deref())
                     .unwrap_or("");
-                prop_writer.write(&var.path, val)?;
+                prop_writer.write(&var.path_string(), val)?;
             }
         }
 
@@ -95,7 +96,7 @@ mod tests {
         let handler = PropertiesHandler;
         let vars = handler.parse(file.path()).unwrap();
         
-        assert!(vars.iter().any(|v| v.path == "server" && v.is_group));
-        assert!(vars.iter().any(|v| v.path == "server.port" && v.value.as_deref() == Some("8080")));
+        assert!(vars.iter().any(|v| v.path_string() == "server" && v.is_group));
+        assert!(vars.iter().any(|v| v.path_string() == "server.port" && v.value.as_deref() == Some("8080")));
     }
 }

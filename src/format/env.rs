@@ -1,4 +1,4 @@
-use super::{ConfigItem, FormatHandler, ItemStatus, ValueType};
+use super::{ConfigItem, FormatHandler, ItemStatus, ValueType, PathSegment};
 use std::fs;
 use std::io::Write;
 use std::path::Path;
@@ -18,9 +18,10 @@ impl FormatHandler for EnvHandler {
 
             if let Some((key, val)) = line.split_once('=') {
                 let parsed_val = val.trim().trim_matches('"').trim_matches('\'').to_string();
+                let key_str = key.trim().to_string();
                 vars.push(ConfigItem {
-                    key: key.trim().to_string(),
-                    path: key.trim().to_string(),
+                    key: key_str.clone(),
+                    path: vec![PathSegment::Key(key_str)],
                     value: Some(parsed_val.clone()),
                     template_value: Some(parsed_val.clone()),
                     default_value: Some(parsed_val),
@@ -116,7 +117,7 @@ mod tests {
         let file = NamedTempFile::new().unwrap();
         let vars = vec![ConfigItem {
             key: "KEY1".to_string(),
-            path: "KEY1".to_string(),
+            path: vec![PathSegment::Key("KEY1".to_string())],
             value: Some("value1".to_string()),
             template_value: None,
             default_value: None,

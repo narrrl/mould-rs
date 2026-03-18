@@ -20,10 +20,25 @@ pub enum ValueType {
     Null,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum PathSegment {
+    Key(String),
+    Index(usize),
+}
+
+impl std::fmt::Display for PathSegment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PathSegment::Key(k) => write!(f, "{}", k),
+            PathSegment::Index(i) => write!(f, "[{}]", i),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ConfigItem {
     pub key: String,
-    pub path: String,
+    pub path: Vec<PathSegment>,
     pub value: Option<String>,
     pub template_value: Option<String>,
     pub default_value: Option<String>,
@@ -33,6 +48,25 @@ pub struct ConfigItem {
     pub value_type: ValueType,
 }
 
+impl ConfigItem {
+    pub fn path_string(&self) -> String {
+        let mut s = String::new();
+        for (i, segment) in self.path.iter().enumerate() {
+            match segment {
+                PathSegment::Key(k) => {
+                    if i > 0 {
+                        s.push('.');
+                    }
+                    s.push_str(k);
+                }
+                PathSegment::Index(idx) => {
+                    s.push_str(&format!("[{}]", idx));
+                }
+            }
+        }
+        s
+    }
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FormatType {
     Env,

@@ -1,4 +1,4 @@
-use super::{ConfigItem, FormatHandler, FormatType, ItemStatus, ValueType};
+use super::{ConfigItem, FormatHandler, FormatType, ItemStatus, ValueType, PathSegment};
 use serde_json::{Map, Value};
 use std::fs;
 use std::path::Path;
@@ -153,26 +153,33 @@ fn json_to_xml(value: &Value) -> String {
     }
 }
 
-// remove unused get_xml_root_name
-// fn get_xml_root_name(content: &str) -> Option<String> { ... }
+fn flatten(value: &Value, current_path: Vec<PathSegment>, key_name: Option<String>, depth: usize, vars: &mut Vec<ConfigItem>) {
+    let mut next_path = current_path.clone();
+    
+    if let Some(ref k) = key_name {
+        if !current_path.is_empty() {
+            // It's a key in an object, so append to path
+            next_path.push(PathSegment::Key(k.clone()));
+        } else {
+            // First element, maybe root
+            if !k.is_empty() {
+                next_path.push(PathSegment::Key(k.clone()));
+            }
+        }
+    }
 
-fn flatten(value: &Value, prefix: &str, depth: usize, key_name: &str, vars: &mut Vec<ConfigItem>) {
-    let path = if prefix.is_empty() {
-        key_name.to_string()
-    } else if key_name.is_empty() {
-        prefix.to_string()
-    } else if key_name.starts_with('[') {
-        format!("{}{}", prefix, key_name)
-    } else {
-        format!("{}.{}", prefix, key_name)
+    let display_key = match next_path.last() {
+        Some(PathSegment::Key(k)) => k.clone(),
+        Some(PathSegment::Index(i)) => format!("[{}]", i),
+        None => "".to_string(),
     };
 
     match value {
         Value::Object(map) => {
-            if !path.is_empty() {
+            if !next_path.is_empty() {
                 vars.push(ConfigItem {
-                    key: key_name.to_string(),
-                    path: path.clone(),
+                    key: display_key,
+                    path: next_path.clone(),
                     value: None,
                     template_value: None,
                     default_value: None,
@@ -182,16 +189,16 @@ fn flatten(value: &Value, prefix: &str, depth: usize, key_name: &str, vars: &mut
                     value_type: ValueType::Null,
                 });
             }
-            let next_depth = if path.is_empty() { depth } else { depth + 1 };
+            let next_depth = if next_path.is_empty() { depth } else { depth + 1 };
             for (k, v) in map {
-                flatten(v, &path, next_depth, k, vars);
+                flatten(v, next_path.clone(), Some(k.clone()), next_depth, vars);
             }
         }
         Value::Array(arr) => {
-            if !path.is_empty() {
+            if !next_path.is_empty() {
                 vars.push(ConfigItem {
-                    key: key_name.to_string(),
-                    path: path.clone(),
+                    key: display_key,
+                    path: next_path.clone(),
                     value: None,
                     template_value: None,
                     default_value: None,
@@ -201,16 +208,17 @@ fn flatten(value: &Value, prefix: &str, depth: usize, key_name: &str, vars: &mut
                     value_type: ValueType::Null,
                 });
             }
-            let next_depth = if path.is_empty() { depth } else { depth + 1 };
+            let next_depth = if next_path.is_empty() { depth } else { depth + 1 };
             for (i, v) in arr.iter().enumerate() {
-                let array_key = format!("[{}]", i);
-                flatten(v, &path, next_depth, &array_key, vars);
+                let mut arr_path = next_path.clone();
+                arr_path.push(PathSegment::Index(i));
+                flatten(v, arr_path, None, next_depth, vars);
             }
         }
         Value::String(s) => {
             vars.push(ConfigItem {
-                key: key_name.to_string(),
-                path: path.clone(),
+                key: display_key,
+                path: next_path.clone(),
                 value: Some(s.clone()),
                 template_value: Some(s.clone()),
                 default_value: Some(s.clone()),
@@ -223,8 +231,8 @@ fn flatten(value: &Value, prefix: &str, depth: usize, key_name: &str, vars: &mut
         Value::Number(n) => {
             let s = n.to_string();
             vars.push(ConfigItem {
-                key: key_name.to_string(),
-                path: path.clone(),
+                key: display_key,
+                path: next_path.clone(),
                 value: Some(s.clone()),
                 template_value: Some(s.clone()),
                 default_value: Some(s.clone()),
@@ -237,8 +245,8 @@ fn flatten(value: &Value, prefix: &str, depth: usize, key_name: &str, vars: &mut
         Value::Bool(b) => {
             let s = b.to_string();
             vars.push(ConfigItem {
-                key: key_name.to_string(),
-                path: path.clone(),
+                key: display_key,
+                path: next_path.clone(),
                 value: Some(s.clone()),
                 template_value: Some(s.clone()),
                 default_value: Some(s.clone()),
@@ -250,8 +258,8 @@ fn flatten(value: &Value, prefix: &str, depth: usize, key_name: &str, vars: &mut
         }
         Value::Null => {
             vars.push(ConfigItem {
-                key: key_name.to_string(),
-                path: path.clone(),
+                key: display_key,
+                path: next_path.clone(),
                 value: Some("".to_string()),
                 template_value: Some("".to_string()),
                 default_value: Some("".to_string()),
@@ -268,7 +276,7 @@ impl FormatHandler for HierarchicalHandler {
     fn parse(&self, path: &Path) -> anyhow::Result<Vec<ConfigItem>> {
         let value = self.read_value(path)?;
         let mut vars = Vec::new();
-        flatten(&value, "", 0, "", &mut vars);
+        flatten(&value, Vec::new(), Some("".to_string()), 0, &mut vars);
         Ok(vars)
     }
 
@@ -286,50 +294,52 @@ impl FormatHandler for HierarchicalHandler {
     }
 }
 
-fn insert_into_value(root: &mut Value, path: &str, new_val_str: &str, value_type: ValueType) {
-    let mut parts = path.split('.');
-    let last_part = match parts.next_back() {
-        Some(p) => p,
-        None => return,
-    };
+fn insert_into_value(root: &mut Value, path: &[PathSegment], new_val_str: &str, value_type: ValueType) {
+    if path.is_empty() {
+        return;
+    }
 
     let mut current = root;
-    for part in parts {
-        let (key, idx) = parse_array_key(part);
-        if !current.is_object() {
-            *current = Value::Object(Map::new());
-        }
-        let map = current.as_object_mut().unwrap();
+    
+    // Traverse all but the last segment
+    for i in 0..path.len() - 1 {
+        let segment = &path[i];
+        let next_segment = &path[i + 1];
 
-        let next_node = map.entry(key.to_string()).or_insert_with(|| {
-            if idx.is_some() {
-                Value::Array(Vec::new())
-            } else {
-                Value::Object(Map::new())
+        match segment {
+            PathSegment::Key(key) => {
+                if !current.is_object() {
+                    *current = Value::Object(Map::new());
+                }
+                let map = current.as_object_mut().unwrap();
+                
+                let next_node = map.entry(key.clone()).or_insert_with(|| {
+                    match next_segment {
+                        PathSegment::Index(_) => Value::Array(Vec::new()),
+                        PathSegment::Key(_) => Value::Object(Map::new()),
+                    }
+                });
+                current = next_node;
             }
-        });
-
-        if let Some(i) = idx {
-            if !next_node.is_array() {
-                *next_node = Value::Array(Vec::new());
+            PathSegment::Index(idx) => {
+                if !current.is_array() {
+                    *current = Value::Array(Vec::new());
+                }
+                let arr = current.as_array_mut().unwrap();
+                while arr.len() <= *idx {
+                    match next_segment {
+                        PathSegment::Index(_) => arr.push(Value::Array(Vec::new())),
+                        PathSegment::Key(_) => arr.push(Value::Object(Map::new())),
+                    }
+                }
+                current = &mut arr[*idx];
             }
-            let arr = next_node.as_array_mut().unwrap();
-            while arr.len() <= i {
-                arr.push(Value::Object(Map::new()));
-            }
-            current = &mut arr[i];
-        } else {
-            current = next_node;
         }
     }
 
-    let (final_key, final_idx) = parse_array_key(last_part);
-    if !current.is_object() {
-        *current = Value::Object(Map::new());
-    }
-    let map = current.as_object_mut().unwrap();
-
-    // Use the preserved ValueType instead of aggressive inference
+    // Handle the final segment
+    let final_segment = &path[path.len() - 1];
+    
     let final_val = match value_type {
         ValueType::Number => {
             if let Ok(n) = new_val_str.parse::<i64>() {
@@ -355,31 +365,24 @@ fn insert_into_value(root: &mut Value, path: &str, new_val_str: &str, value_type
         _ => Value::String(new_val_str.to_string()),
     };
 
-    if let Some(i) = final_idx {
-        let next_node = map
-            .entry(final_key.to_string())
-            .or_insert_with(|| Value::Array(Vec::new()));
-        if !next_node.is_array() {
-            *next_node = Value::Array(Vec::new());
+    match final_segment {
+        PathSegment::Key(key) => {
+            if !current.is_object() {
+                *current = Value::Object(Map::new());
+            }
+            let map = current.as_object_mut().unwrap();
+            map.insert(key.clone(), final_val);
         }
-        let arr = next_node.as_array_mut().unwrap();
-        while arr.len() <= i {
-            arr.push(Value::Null);
+        PathSegment::Index(idx) => {
+            if !current.is_array() {
+                *current = Value::Array(Vec::new());
+            }
+            let arr = current.as_array_mut().unwrap();
+            while arr.len() <= *idx {
+                arr.push(Value::Null);
+            }
+            arr[*idx] = final_val;
         }
-        arr[i] = final_val;
-    } else {
-        map.insert(final_key.to_string(), final_val);
-    }
-}
-
-fn parse_array_key(part: &str) -> (&str, Option<usize>) {
-    if part.ends_with(']') && part.contains('[') {
-        let start_idx = part.find('[').unwrap();
-        let key = &part[..start_idx];
-        let idx = part[start_idx + 1..part.len() - 1].parse::<usize>().ok();
-        (key, idx)
-    } else {
-        (part, None)
     }
 }
 
@@ -401,7 +404,7 @@ mod tests {
             }
         });
 
-        flatten(&json, "", 0, "", &mut vars);
+        flatten(&json, Vec::new(), Some("".to_string()), 0, &mut vars);
         assert_eq!(vars.len(), 6);
 
         let mut root = Value::Object(Map::new());
@@ -411,7 +414,6 @@ mod tests {
             }
         }
 
-        // When unflattening, it parses bool back
         let unflattened_json = serde_json::to_string(&root).unwrap();
         assert!(unflattened_json.contains("\"8080:80\""));
         assert!(unflattened_json.contains("true"));
@@ -420,7 +422,6 @@ mod tests {
     #[test]
     fn test_type_preservation() {
         let mut vars = Vec::new();
-        // A JSON with various tricky types
         let json = serde_json::json!({
             "port_num": 8080,
             "port_str": "8080",
@@ -430,7 +431,7 @@ mod tests {
             "float_str": "42.42"
         });
 
-        flatten(&json, "", 0, "", &mut vars);
+        flatten(&json, Vec::new(), Some("".to_string()), 0, &mut vars);
         
         let mut root = Value::Object(Map::new());
         for var in vars {
@@ -439,7 +440,6 @@ mod tests {
             }
         }
 
-        // Validate that types are exactly preserved after re-assembling
         let unflattened = root.as_object().unwrap();
         
         assert!(unflattened["port_num"].is_number(), "port_num should be a number");
@@ -471,7 +471,7 @@ server:
 ";
         let yaml_val: Value = serde_yaml::from_str(yaml_str).unwrap();
         let mut vars = Vec::new();
-        flatten(&yaml_val, "", 0, "", &mut vars);
+        flatten(&yaml_val, Vec::new(), Some("".to_string()), 0, &mut vars);
         
         let mut root = Value::Object(Map::new());
         for var in vars {
@@ -482,7 +482,6 @@ server:
         
         let unflattened_yaml = serde_yaml::to_string(&root).unwrap();
         assert!(unflattened_yaml.contains("port: 8080"));
-        // Serde YAML might output '8080' or "8080"
         assert!(unflattened_yaml.contains("port_str: '8080'") || unflattened_yaml.contains("port_str: \"8080\""));
         assert!(unflattened_yaml.contains("enabled: true"));
     }
@@ -495,12 +494,11 @@ port = 8080
 port_str = \"8080\"
 enabled = true
 ";
-        // parse to toml Value, then convert to serde_json Value to reuse the same flatten path
         let toml_val: toml::Value = toml::from_str(toml_str).unwrap();
         let json_val: Value = serde_json::to_value(toml_val).unwrap();
 
         let mut vars = Vec::new();
-        flatten(&json_val, "", 0, "", &mut vars);
+        flatten(&json_val, Vec::new(), Some("".to_string()), 0, &mut vars);
         
         let mut root = Value::Object(Map::new());
         for var in vars {
@@ -509,7 +507,6 @@ enabled = true
             }
         }
         
-        // Convert back to TOML
         let toml_root: toml::Value = serde_json::from_value(root).unwrap();
         let unflattened_toml = toml::to_string(&toml_root).unwrap();
         
@@ -525,7 +522,7 @@ enabled = true
         let json_val = xml_to_json(xml_str).unwrap();
 
         let mut vars = Vec::new();
-        flatten(&json_val, "", 0, "", &mut vars);
+        flatten(&json_val, Vec::new(), Some("".to_string()), 0, &mut vars);
         
         let mut root = Value::Object(Map::new());
         for var in vars {
@@ -534,7 +531,6 @@ enabled = true
             }
         }
         
-        println!("Reconstructed root: {:?}", root);
         let unflattened_xml = json_to_xml(&root);
 
         assert!(unflattened_xml.contains("<port>8080</port>"));

@@ -1,4 +1,4 @@
-use crate::format::ConfigItem;
+use crate::format::{ConfigItem, PathSegment};
 use tui_input::Input;
 
 /// Represents the current operating mode of the application.
@@ -195,21 +195,17 @@ impl App {
         let selected_path = self.vars[self.selected].path.clone();
         let is_group = self.vars[self.selected].is_group;
 
-        // Identify if the item being removed is an array item
-        let array_info = parse_index(&selected_path);
-
         // 1. Identify all items to remove
         let mut to_remove = Vec::new();
         to_remove.push(self.selected);
 
         if is_group {
-            let prefix_dot = format!("{}.", selected_path);
-            let prefix_bracket = format!("{}[", selected_path);
             for (i, var) in self.vars.iter().enumerate() {
                 if i == self.selected {
                     continue;
                 }
-                if var.path.starts_with(&prefix_dot) || var.path.starts_with(&prefix_bracket) {
+                // An item is a child if its path starts with the selected path
+                if var.path.starts_with(&selected_path) {
                     to_remove.push(i);
                 }
             }
@@ -222,17 +218,19 @@ impl App {
         }
 
         // 3. Re-index subsequent array items if applicable
-        if let Some((base, removed_idx)) = array_info {
-            let base = base.to_string();
+        if let Some(PathSegment::Index(removed_idx)) = selected_path.last() {
+            let base_path = &selected_path[..selected_path.len() - 1];
+            
             for var in self.vars.iter_mut() {
-                if var.path.starts_with(&base) {
-                    // We need to find the index segment that matches this array
-                    if let Some((b, i, suffix)) = find_array_segment(&var.path, &base)
-                        && b == base && i > removed_idx {
+                if var.path.starts_with(base_path) && var.path.len() >= selected_path.len() {
+                    // Check if the element at the level of the removed index is an index
+                    if let PathSegment::Index(i) = var.path[selected_path.len() - 1]
+                        && i > *removed_idx {
                             let new_idx = i - 1;
-                            var.path = format!("{}[{}]{}", base, new_idx, suffix);
-                            // Also update key if it matches the old index exactly
-                            if var.key == format!("[{}]", i) {
+                            var.path[selected_path.len() - 1] = PathSegment::Index(new_idx);
+                            
+                            // If this was an array element itself (not a child property), update its key
+                            if var.path.len() == selected_path.len() {
                                 var.key = format!("[{}]", new_idx);
                             }
                         }
@@ -254,14 +252,15 @@ impl App {
         }
 
         self.save_undo_state();
-        let (base, idx, depth) = {
+        let (base_path, idx, depth) = {
             let selected_item = &self.vars[self.selected];
             if selected_item.is_group {
                 return;
             }
             let path = &selected_item.path;
-            if let Some((base, idx)) = parse_index(path) {
-                (base.to_string(), idx, selected_item.depth)
+            
+            if let Some(PathSegment::Index(idx)) = path.last() {
+                (path[..path.len() - 1].to_vec(), *idx, selected_item.depth)
             } else {
                 return;
             }
@@ -276,21 +275,23 @@ impl App {
 
         // 1. Shift all items in this array that have index >= new_idx
         for var in self.vars.iter_mut() {
-            if var.path.starts_with(&base)
-                && let Some((b, i)) = parse_index(&var.path)
-                    && b == base && i >= new_idx {
-                        var.path = format!("{}[{}]", base, i + 1);
-                        // Also update key if it was just the index
-                        if var.key == format!("[{}]", i) {
+            if var.path.starts_with(&base_path) && var.path.len() > base_path.len()
+                && let PathSegment::Index(i) = var.path[base_path.len()]
+                    && i >= new_idx {
+                        var.path[base_path.len()] = PathSegment::Index(i + 1);
+                        if var.path.len() == base_path.len() + 1 {
                             var.key = format!("[{}]", i + 1);
                         }
                     }
         }
 
         // 2. Insert new item
+        let mut new_path = base_path;
+        new_path.push(PathSegment::Index(new_idx));
+        
         let new_item = ConfigItem {
             key: format!("[{}]", new_idx),
-            path: format!("{}[{}]", base, new_idx),
+            path: new_path,
             value: Some("".to_string()),
             template_value: None,
             default_value: None,
@@ -299,6 +300,7 @@ impl App {
             status: crate::format::ItemStatus::Modified,
             value_type: crate::format::ValueType::String,
         };
+        
         self.vars.insert(insert_pos, new_item);
         self.selected = insert_pos;
         self.sync_input_with_selected();
@@ -313,7 +315,7 @@ impl App {
 
     pub fn selected_is_array(&self) -> bool {
         self.vars.get(self.selected)
-            .map(|v| !v.is_group && v.path.contains('['))
+            .map(|v| !v.is_group && matches!(v.path.last(), Some(PathSegment::Index(_))))
             .unwrap_or(false)
     }
 
@@ -344,30 +346,4 @@ impl App {
             self.status_message = Some("Nothing to undo".to_string());
         }
     }
-}
-
-fn parse_index(path: &str) -> Option<(&str, usize)> {
-    if let Some(end) = path.rfind(']') {
-        let segment = &path[..=end];
-        if let Some(start) = segment.rfind('[')
-            && let Ok(idx) = segment[start + 1..end].parse::<usize>() {
-                // Return the base and index
-                return Some((&path[..start], idx));
-            }
-    }
-    None
-}
-
-/// Helper to find an array segment in a path given a base prefix.
-fn find_array_segment<'a>(path: &'a str, base: &str) -> Option<(&'a str, usize, &'a str)> {
-    if !path.starts_with(base) {
-        return None;
-    }
-    let remaining = &path[base.len()..];
-    if remaining.starts_with('[')
-        && let Some(end) = remaining.find(']')
-            && let Ok(idx) = remaining[1..end].parse::<usize>() {
-                return Some((&path[..base.len()], idx, &remaining[end + 1..]));
-            }
-    None
 }

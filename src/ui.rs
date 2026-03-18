@@ -189,9 +189,9 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
 
     if let Some(var) = current_var {
         if var.is_group {
-            input_title = format!(" Group: {} ", var.path);
+            input_title = format!(" Group: {} ", var.path_string());
         } else {
-            input_title = format!(" Editing: {} ", var.path);
+            input_title = format!(" Editing: {} ", var.path_string());
             if let Some(t_val) = &var.template_value {
                 extra_info = format!("  [Template: {}]", t_val);
             }

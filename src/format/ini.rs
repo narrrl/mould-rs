@@ -1,4 +1,4 @@
-use super::{ConfigItem, FormatHandler, ItemStatus, ValueType};
+use super::{ConfigItem, FormatHandler, ItemStatus, ValueType, PathSegment};
 use ini::Ini;
 use std::path::Path;
 
@@ -15,7 +15,7 @@ impl FormatHandler for IniHandler {
             if !section_name.is_empty() {
                 vars.push(ConfigItem {
                     key: section_name.to_string(),
-                    path: section_name.to_string(),
+                    path: vec![PathSegment::Key(section_name.to_string())],
                     value: None,
                     template_value: None,
                     default_value: None,
@@ -28,9 +28,9 @@ impl FormatHandler for IniHandler {
 
             for (key, value) in prop {
                 let path = if section_name.is_empty() {
-                    key.to_string()
+                    vec![PathSegment::Key(key.to_string())]
                 } else {
-                    format!("{}.{}", section_name, key)
+                    vec![PathSegment::Key(section_name.to_string()), PathSegment::Key(key.to_string())]
                 };
 
                 vars.push(ConfigItem {
@@ -58,11 +58,14 @@ impl FormatHandler for IniHandler {
                     .or(var.template_value.as_deref())
                     .unwrap_or("");
                 
-                if let Some((section, key)) = var.path.split_once('.') {
-                    conf.with_section(Some(section)).set(key, val);
-                } else {
-                    conf.with_section(None::<String>).set(&var.path, val);
-                }
+                if var.path.len() == 2 {
+                    if let (PathSegment::Key(section), PathSegment::Key(key)) = (&var.path[0], &var.path[1]) {
+                        conf.with_section(Some(section)).set(key, val);
+                    }
+                } else if var.path.len() == 1
+                    && let PathSegment::Key(key) = &var.path[0] {
+                        conf.with_section(None::<String>).set(key, val);
+                    }
             }
         }
         conf.write_to_file(path)?;
@@ -84,8 +87,8 @@ mod tests {
         let handler = IniHandler;
         let vars = handler.parse(file.path()).unwrap();
         
-        assert!(vars.iter().any(|v| v.path == "server" && v.is_group));
-        assert!(vars.iter().any(|v| v.path == "server.port" && v.value.as_deref() == Some("8080")));
-        assert!(vars.iter().any(|v| v.path == "database.host" && v.value.as_deref() == Some("localhost")));
+        assert!(vars.iter().any(|v| v.path_string() == "server" && v.is_group));
+        assert!(vars.iter().any(|v| v.path_string() == "server.port" && v.value.as_deref() == Some("8080")));
+        assert!(vars.iter().any(|v| v.path_string() == "database.host" && v.value.as_deref() == Some("localhost")));
     }
 }
