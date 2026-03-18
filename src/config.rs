@@ -122,6 +122,9 @@ pub struct KeybindsConfig {
     pub undo: String,
     pub redo: String,
     pub rename: String,
+    pub append_group: String,
+    pub prepend_group: String,
+    pub toggle_group: String,
     }
 
     impl Default for KeybindsConfig {
@@ -146,6 +149,9 @@ pub struct KeybindsConfig {
             undo: "u".to_string(),
             redo: "U".to_string(),
             rename: "r".to_string(),
+            append_group: "alt+o".to_string(),
+            prepend_group: "alt+O".to_string(),
+            toggle_group: "t".to_string(),
         }
     }
     }

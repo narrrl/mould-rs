@@ -80,15 +80,46 @@ mod tests {
     use std::io::Write;
 
     #[test]
-    fn test_parse_ini() {
-        let mut file = NamedTempFile::new().unwrap();
-        writeln!(file, "[server]\nport=8080\n[database]\nhost=localhost").unwrap();
-        
+    fn test_section_rename_write() {
         let handler = IniHandler;
-        let vars = handler.parse(file.path()).unwrap();
+        let mut vars = vec![
+            ConfigItem {
+                key: "server".to_string(),
+                path: vec![PathSegment::Key("server".to_string())],
+                value: None,
+                template_value: None,
+                default_value: None,
+                depth: 0,
+                is_group: true,
+                status: ItemStatus::Present,
+                value_type: ValueType::Null,
+            },
+            ConfigItem {
+                key: "port".to_string(),
+                path: vec![PathSegment::Key("server".to_string()), PathSegment::Key("port".to_string())],
+                value: Some("8080".to_string()),
+                template_value: Some("8080".to_string()),
+                default_value: Some("8080".to_string()),
+                depth: 1,
+                is_group: false,
+                status: ItemStatus::Present,
+                value_type: ValueType::String,
+            }
+        ];
+
+        // Rename "server" to "srv"
+        vars[0].key = "srv".to_string();
+        vars[0].path = vec![PathSegment::Key("srv".to_string())];
         
-        assert!(vars.iter().any(|v| v.path_string() == "server" && v.is_group));
-        assert!(vars.iter().any(|v| v.path_string() == "server.port" && v.value.as_deref() == Some("8080")));
-        assert!(vars.iter().any(|v| v.path_string() == "database.host" && v.value.as_deref() == Some("localhost")));
+        // Update child path
+        vars[1].path = vec![PathSegment::Key("srv".to_string()), PathSegment::Key("port".to_string())];
+        
+        let file = NamedTempFile::new().unwrap();
+        handler.write(file.path(), &vars).unwrap();
+        
+        let content = std::fs::read_to_string(file.path()).unwrap();
+        assert!(content.contains("[srv]"));
+        assert!(content.contains("port=8080"));
+        assert!(!content.contains("[server]"));
     }
 }

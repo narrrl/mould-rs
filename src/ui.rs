@@ -238,7 +238,7 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
     f.render_widget(input, chunks[2]);
 
     // Position the terminal cursor correctly when in Insert mode.
-    if let Mode::Insert = app.mode {
+    if matches!(app.mode, Mode::Insert) || matches!(app.mode, Mode::InsertKey) {
         f.set_cursor_position(ratatui::layout::Position::new(
             chunks[2].x + 1 + cursor_pos as u16,
             chunks[2].y + 1,
@@ -292,11 +292,15 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
                     parts.push(format!("{}/{}/{} edit", kb.edit, kb.edit_append, kb.edit_substitute));
                 }
                 parts.push(format!("{} rename", kb.rename));
+                parts.push(format!("{} toggle", kb.toggle_group));
                 if app.selected_is_missing() {
                     parts.push(format!("{} add", "a")); // 'a' is currently hardcoded in runner
                 }
                 if app.selected_is_array() {
                     parts.push(format!("{}/{} array", kb.append_item, kb.prepend_item));
+                } else {
+                    parts.push(format!("{}/{} add", kb.append_item, kb.prepend_item));
+                    parts.push(format!("{}/{} group", kb.append_group, kb.prepend_group));
                 }
                 parts.push(format!("{} del", kb.delete_item));
                 parts.push(format!("{} undo", kb.undo));

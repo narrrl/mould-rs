@@ -217,6 +217,7 @@ impl App {
                             let mut p = new_path.clone();
                             p.extend(var.path[old_path.len()..].iter().cloned());
                             var.path = p;
+                            var.status = crate::format::ItemStatus::Modified;
                         }
                     }
                 }
@@ -229,6 +230,11 @@ impl App {
     /// Transitions the application into Insert Mode for keys.
     pub fn enter_insert_key(&mut self) {
         if !self.vars.is_empty() {
+            if let Some(var) = self.vars.get(self.selected)
+                && matches!(var.path.last(), Some(PathSegment::Index(_))) {
+                    self.status_message = Some("Cannot rename array indices".to_string());
+                    return;
+                }
             self.mode = Mode::InsertKey;
             self.sync_input_with_selected();
         }
@@ -331,24 +337,28 @@ impl App {
     }
 
     /// Adds a new item relative to the selected item.
-    pub fn add_item(&mut self, after: bool) {
+    pub fn add_item(&mut self, after: bool, is_group: bool) {
         if self.vars.is_empty() {
             let new_key = "NEW_VAR".to_string();
             self.vars.push(ConfigItem {
                 key: new_key.clone(),
                 path: vec![PathSegment::Key(new_key)],
-                value: Some("".to_string()),
+                value: if is_group { None } else { Some("".to_string()) },
                 template_value: None,
                 default_value: None,
                 depth: 0,
-                is_group: false,
+                is_group,
                 status: crate::format::ItemStatus::Modified,
-                value_type: crate::format::ValueType::String,
+                value_type: if is_group { crate::format::ValueType::Null } else { crate::format::ValueType::String },
             });
             self.selected = 0;
             self.sync_input_with_selected();
             self.save_undo_state();
-            self.enter_insert(InsertVariant::Start);
+            if is_group {
+                self.enter_insert_key();
+            } else {
+                self.enter_insert(InsertVariant::Start);
+            }
             return;
         }
 
@@ -418,7 +428,7 @@ impl App {
             }
         } else {
             let mut count = 1;
-            let mut candidate = "NEW_VAR".to_string();
+            let mut candidate = if is_group { "NEW_GROUP".to_string() } else { "NEW_VAR".to_string() };
             let parent_path_slice = new_path.as_slice();
             
             while self.vars.iter().any(|v| {
@@ -426,7 +436,7 @@ impl App {
                 && v.path.len() == parent_path_slice.len() + 1 
                 && v.key == candidate
             }) {
-                candidate = format!("NEW_VAR_{}", count);
+                candidate = if is_group { format!("NEW_GROUP_{}", count) } else { format!("NEW_VAR_{}", count) };
                 count += 1;
             }
             new_path.push(PathSegment::Key(candidate.clone()));
@@ -437,13 +447,13 @@ impl App {
         let new_item = ConfigItem {
             key: final_key,
             path: new_path,
-            value: Some("".to_string()),
+            value: if is_group { None } else { Some("".to_string()) },
             template_value: None,
             default_value: None,
             depth: new_depth,
-            is_group: false,
+            is_group,
             status: crate::format::ItemStatus::Modified,
-            value_type: crate::format::ValueType::String,
+            value_type: if is_group { crate::format::ValueType::Null } else { crate::format::ValueType::String },
         };
 
         self.vars.insert(insert_pos, new_item);
@@ -456,6 +466,28 @@ impl App {
             self.enter_insert_key();
         }
         self.status_message = None;
+    }
+
+    /// Toggles the group status of the currently selected item.
+    pub fn toggle_group_selected(&mut self) {
+        if let Some(var) = self.vars.get_mut(self.selected) {
+            // Cannot toggle array items (always vars)
+            if matches!(var.path.last(), Some(PathSegment::Index(_))) {
+                self.status_message = Some("Cannot toggle array items".to_string());
+                return;
+            }
+
+            var.is_group = !var.is_group;
+            if var.is_group {
+                var.value = None;
+                var.value_type = crate::format::ValueType::Null;
+            } else {
+                var.value = Some("".to_string());
+                var.value_type = crate::format::ValueType::String;
+            }
+            var.status = crate::format::ItemStatus::Modified;
+            self.sync_input_with_selected();
+        }
     }
 
     /// Status bar helpers

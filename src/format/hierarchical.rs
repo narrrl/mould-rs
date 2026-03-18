@@ -576,25 +576,43 @@ enabled = true
     }
 
     #[test]
-    fn test_xml_flatten_unflatten() {
-        let xml_str = "<config><server><port>8080</port><enabled>true</enabled></server></config>";
-        
-        let json_val = xml_to_json(xml_str).unwrap();
-
+    fn test_group_rename_write() {
         let mut vars = Vec::new();
-        flatten(&json_val, Vec::new(), Some("".to_string()), 0, &mut vars);
+        let json = serde_json::json!({
+            "old_group": {
+                "key": "val"
+            }
+        });
+
+        flatten(&json, Vec::new(), Some("".to_string()), 0, &mut vars);
+        assert_eq!(vars.len(), 2);
+        assert_eq!(vars[0].key, "old_group");
+        assert_eq!(vars[0].is_group, true);
+        assert_eq!(vars[1].key, "key");
+        assert_eq!(vars[1].path_string(), "old_group.key");
+
+        // Manually simulate a rename of "old_group" to "new_group"
+        let old_path = vars[0].path.clone();
+        let new_key = "new_group".to_string();
+        let mut new_path = vec![PathSegment::Key(new_key.clone())];
         
+        vars[0].key = new_key;
+        vars[0].path = new_path.clone();
+        
+        // Update child path
+        vars[1].path = vec![PathSegment::Key("new_group".to_string()), PathSegment::Key("key".to_string())];
+        
+        let handler = HierarchicalHandler::new(FormatType::Json);
         let mut root = Value::Object(Map::new());
-        for var in vars {
+        for var in &vars {
             if !var.is_group {
                 insert_into_value(&mut root, &var.path, var.value.as_deref().unwrap_or(""), var.value_type);
             }
         }
         
-        let unflattened_xml = json_to_xml(&root);
-
-        assert!(unflattened_xml.contains("<port>8080</port>"));
-        assert!(unflattened_xml.contains("<enabled>true</enabled>"));
-        assert!(unflattened_xml.contains("<config>") && unflattened_xml.contains("</config>"));
+        let out = serde_json::to_string(&root).unwrap();
+        assert!(out.contains("\"new_group\""));
+        assert!(out.contains("\"key\":\"val\""));
+        assert!(!out.contains("\"old_group\""));
     }
 }

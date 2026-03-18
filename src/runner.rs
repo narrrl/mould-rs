@@ -110,8 +110,19 @@ where
 
     /// Handles primary navigation (j/k) and transitions to insert or command modes.
     fn handle_navigation_mode(&mut self, key: KeyEvent) -> io::Result<()> {
-        if let KeyCode::Char(c) = key.code {
-            self.key_sequence.push(c);
+        let key_str = if let KeyCode::Char(c) = key.code {
+            let mut s = String::new();
+            if key.modifiers.contains(event::KeyModifiers::ALT) {
+                s.push_str("alt+");
+            }
+            s.push(c);
+            s
+        } else {
+            String::new()
+        };
+
+        if !key_str.is_empty() {
+            self.key_sequence.push_str(&key_str);
 
             // Collect all configured keybinds
             let binds = [
@@ -131,6 +142,9 @@ where
                 (&self.config.keybinds.undo, "undo"),
                 (&self.config.keybinds.redo, "redo"),
                 (&self.config.keybinds.rename, "rename"),
+                (&self.config.keybinds.append_group, "append_group"),
+                (&self.config.keybinds.prepend_group, "prepend_group"),
+                (&self.config.keybinds.toggle_group, "toggle_group"),
                 (&"a".to_string(), "add_missing"),
                 (&":".to_string(), "command"),
                 (&"q".to_string(), "quit"),
@@ -165,12 +179,18 @@ where
                     "previous_match" => self.app.jump_previous_match(),
                     "jump_top" => self.app.jump_top(),
                     "jump_bottom" => self.app.jump_bottom(),
-                    "append_item" => self.app.add_item(true),
-                    "prepend_item" => self.app.add_item(false),
+                    "append_item" => self.app.add_item(true, false),
+                    "prepend_item" => self.app.add_item(false, false),
                     "delete_item" => self.app.delete_selected(),
                     "undo" => self.app.undo(),
                     "redo" => self.app.redo(),
                     "rename" => self.app.enter_insert_key(),
+                    "append_group" => self.app.add_item(true, true),
+                    "prepend_group" => self.app.add_item(false, true),
+                    "toggle_group" => {
+                        self.app.toggle_group_selected();
+                        self.app.save_undo_state();
+                    }
                     "add_missing" => {
                         self.add_missing_item();
                     }
@@ -182,9 +202,8 @@ where
                     _ => {}
                 }
             } else if !prefix_match {
-                // Not an exact match and not a prefix for any bind, clear and restart seq
                 self.key_sequence.clear();
-                self.key_sequence.push(c);
+                self.key_sequence.push_str(&key_str);
             }
         } else {
             // Non-character keys reset the sequence buffer
