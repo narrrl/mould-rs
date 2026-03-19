@@ -3,6 +3,9 @@ use tui_input::Input;
 use crate::undo::UndoTree;
 
 /// Represents the current operating mode of the application.
+/// 
+/// Modality allows the application to reuse the same keyboard events 
+/// for different contextual actions (navigation vs. text entry).
 pub enum Mode {
     /// Standard navigation and command mode.
     Normal,
@@ -14,34 +17,43 @@ pub enum Mode {
     Search,
 }
 
+/// Defines where the cursor starts when entering Insert mode.
 pub enum InsertVariant {
+    /// Cursor at the beginning of the text.
     Start,
+    /// Cursor at the end of the text.
     End,
+    /// Text is cleared before entry.
     Substitute,
 }
 
 /// The core application state, holding all configuration variables and UI status.
+///
+/// This struct is the "Single Source of Truth" for the TUI. It manages 
+/// selection, filtering, history, and structural mutations.
 pub struct App {
-    /// The list of configuration variables being edited.
+    /// The flattened list of configuration variables being edited.
     pub vars: Vec<ConfigItem>,
     /// Index of the currently selected variable in the list.
     pub selected: usize,
-    /// The current interaction mode (Normal or Insert).
+    /// The current interaction mode (Normal, Insert, etc.).
     pub mode: Mode,
     /// Whether the main application loop should continue running.
     pub running: bool,
-    /// An optional message to display in the status bar (e.g., "Saved to .env").
+    /// An optional message to display in the status bar.
     pub status_message: Option<String>,
     /// The active text input buffer for the selected variable.
     pub input: Input,
     /// The current search query for filtering keys.
     pub search_query: String,
-    /// Undo history structured as a tree
+    /// Undo history structured as a tree.
     pub undo_tree: UndoTree,
 }
 
 impl App {
     /// Initializes a new application instance with the provided variables.
+    ///
+    /// It automatically initializes the undo tree with the starting state.
     pub fn new(vars: Vec<ConfigItem>) -> Self {
         let initial_input = vars.first().and_then(|v| v.value.clone()).unwrap_or_default();
         let undo_tree = UndoTree::new(vars.clone(), 0);
@@ -57,7 +69,7 @@ impl App {
         }
     }
 
-    /// Returns the indices of variables that match the search query.
+    /// Returns the indices of variables that match the search query (case-insensitive).
     pub fn matching_indices(&self) -> Vec<usize> {
         if self.search_query.is_empty() {
             return Vec::new();
@@ -91,7 +103,7 @@ impl App {
         }
     }
 
-    /// Jumps to the top of the list.
+    /// Jumps the selection to the top of the list.
     pub fn jump_top(&mut self) {
         if !self.vars.is_empty() {
             self.selected = 0;
@@ -99,7 +111,7 @@ impl App {
         }
     }
 
-    /// Jumps to the bottom of the list.
+    /// Jumps the selection to the bottom of the list.
     pub fn jump_bottom(&mut self) {
         if !self.vars.is_empty() {
             self.selected = self.vars.len() - 1;
@@ -144,7 +156,10 @@ impl App {
         }
     }
 
-    /// Updates the input buffer to reflect the value of the currently selected variable.
+    /// Updates the input buffer to reflect the current state of the selected item.
+    ///
+    /// If in `InsertKey` mode, the buffer is synced with the item's `key`.
+    /// Otherwise, it is synced with the item's `value`.
     pub fn sync_input_with_selected(&mut self) {
         if let Some(var) = self.vars.get(self.selected) {
             let val = match self.mode {
@@ -155,8 +170,10 @@ impl App {
         }
     }
 
-    /// Commits the current text in the input buffer back to the selected variable's value or key.
-    /// Returns true if commit was successful, false if there was an error (e.g. collision).
+    /// Commits the current text in the input buffer back to the selected variable.
+    /// 
+    /// Returns true if commit was successful, false if there was an error 
+    /// (e.g., a key name collision or empty key).
     pub fn commit_input(&mut self) -> bool {
         match self.mode {
             Mode::Insert => {
@@ -179,7 +196,7 @@ impl App {
                     return true;
                 }
                 
-                // Collision check: siblings share the same parent path
+                // Collision check: ensure siblings don't already have this key.
                 let parent_path = if selected_var.path.len() > 1 {
                     &selected_var.path[..selected_var.path.len() - 1]
                 } else {
@@ -198,7 +215,7 @@ impl App {
                     return false;
                 }
                 
-                // Update selected item's key and path
+                // Update selected item's key and its full internal path.
                 let old_path = selected_var.path.clone();
                 let mut new_path = parent_path.to_vec();
                 new_path.push(PathSegment::Key(new_key.clone()));
@@ -210,7 +227,7 @@ impl App {
                     var.status = crate::format::ItemStatus::Modified;
                 }
                 
-                // Update paths of all children if it's a group
+                // Recursively update paths of all children if the renamed item is a group.
                 if selected_var.is_group {
                     for var in self.vars.iter_mut() {
                         if var.path.starts_with(&old_path) && var.path.len() > old_path.len() {
@@ -227,7 +244,10 @@ impl App {
         }
     }
 
-    /// Transitions the application into Insert Mode for keys.
+    /// Transitions the application into `InsertKey` mode to modify item names.
+    ///
+    /// Renaming is blocked for array indices (e.g., `[0]`) as they are 
+    /// managed automatically by the application logic.
     pub fn enter_insert_key(&mut self) {
         if !self.vars.is_empty() {
             if let Some(var) = self.vars.get(self.selected)
@@ -240,7 +260,10 @@ impl App {
         }
     }
 
-    /// Transitions the application into Insert Mode with a specific variant.
+    /// Transitions the application into `Insert` mode to modify variable values.
+    ///
+    /// If the selected item is a group, it automatically routes to 
+    /// `enter_insert_key` instead.
     pub fn enter_insert(&mut self, variant: InsertVariant) {
         if let Some(var) = self.vars.get(self.selected) {
             if var.is_group {
@@ -267,7 +290,7 @@ impl App {
         }
     }
 
-    /// Commits the current input and transitions the application into Normal Mode.
+    /// Commits the current input and transitions back to `Normal` mode.
     pub fn enter_normal(&mut self) {
         if self.commit_input() {
             self.save_undo_state();
@@ -275,14 +298,17 @@ impl App {
         }
     }
 
-    /// Cancels the current input and transitions the application into Normal Mode.
+    /// Aborts the current input and reverts to `Normal` mode without saving changes.
     pub fn cancel_insert(&mut self) {
         self.mode = Mode::Normal;
         self.sync_input_with_selected();
         self.status_message = None;
     }
 
-    /// Deletes the currently selected item. If it's a group, deletes all children.
+    /// Deletes the currently selected item and all its nested children.
+    ///
+    /// If the deleted item is part of an array, subsequent indices are 
+    /// automatically shifted and renamed to maintain a continuous sequence.
     pub fn delete_selected(&mut self) {
         if self.vars.is_empty() {
             return;
@@ -291,7 +317,7 @@ impl App {
         let selected_path = self.vars[self.selected].path.clone();
         let is_group = self.vars[self.selected].is_group;
 
-        // 1. Identify all items to remove
+        // 1. Identify all items to remove (the item itself + all children)
         let mut to_remove = Vec::new();
         to_remove.push(self.selected);
 
@@ -300,7 +326,6 @@ impl App {
                 if i == self.selected {
                     continue;
                 }
-                // An item is a child if its path starts with the selected path
                 if var.path.starts_with(&selected_path) {
                     to_remove.push(i);
                 }
@@ -319,13 +344,11 @@ impl App {
             
             for var in self.vars.iter_mut() {
                 if var.path.starts_with(base_path) && var.path.len() >= selected_path.len() {
-                    // Check if the element at the level of the removed index is an index
                     if let PathSegment::Index(i) = var.path[selected_path.len() - 1]
                         && i > *removed_idx {
                             let new_idx = i - 1;
                             var.path[selected_path.len() - 1] = PathSegment::Index(new_idx);
                             
-                            // If this was an array element itself (not a child property), update its key
                             if var.path.len() == selected_path.len() {
                                 var.key = format!("[{}]", new_idx);
                             }
@@ -343,6 +366,13 @@ impl App {
     }
 
     /// Adds a new item relative to the selected item.
+    ///
+    /// - `after`: If true, adds below the selection; otherwise adds above.
+    /// - `is_group`: If true, creates a new structural node (object/array).
+    /// - `as_child`: If true, adds inside the selected group.
+    ///
+    /// The method automatically detects if the parent is an array and 
+    /// formats the new key accordingly (e.g., `[1]`).
     pub fn add_item(&mut self, after: bool, is_group: bool, as_child: bool) {
         if self.vars.is_empty() {
             let new_key = if is_group { "NEW_GROUP".to_string() } else { "NEW_VAR".to_string() };
@@ -404,7 +434,6 @@ impl App {
             new_path = selected_item.path.clone();
             new_depth = selected_item.depth + 1;
             
-            // Check if this group already contains array items
             if self.is_array_group(&selected_item.path) {
                 is_array_item = true;
                 let new_idx = 0; // Prepend to array
@@ -442,7 +471,6 @@ impl App {
             new_path = parent_path;
             new_depth = selected_item.depth;
             
-            // If the parent is an array group, this is also an array item
             if !new_path.is_empty() && self.is_array_group(&new_path) {
                 is_array_item = true;
                 if let Some(PathSegment::Index(idx)) = selected_item.path.last() {
@@ -505,9 +533,11 @@ impl App {
     }
 
     /// Toggles the group status of the currently selected item.
+    ///
+    /// Changing a group to a variable clears its children (visually) 
+    /// and resets its value. Changing a variable to a group removes its value.
     pub fn toggle_group_selected(&mut self) {
         if let Some(var) = self.vars.get_mut(self.selected) {
-            // Cannot toggle array items (always vars)
             if matches!(var.path.last(), Some(PathSegment::Index(_))) {
                 self.status_message = Some("Cannot toggle array items".to_string());
                 return;
@@ -526,11 +556,12 @@ impl App {
         }
     }
 
-    /// Status bar helpers
+    /// Returns true if the selected item is a structural node (group/object).
     pub fn selected_is_group(&self) -> bool {
         self.vars.get(self.selected).map(|v| v.is_group).unwrap_or(false)
     }
 
+    /// Returns true if the provided path identifies a node that contains array elements.
     pub fn is_array_group(&self, group_path: &[PathSegment]) -> bool {
         self.vars.iter().any(|v| 
             v.path.starts_with(group_path) 
@@ -539,24 +570,26 @@ impl App {
         )
     }
 
+    /// Returns true if the selected item is an indexed array element.
     pub fn selected_is_array(&self) -> bool {
         self.vars.get(self.selected)
             .map(|v| !v.is_group && matches!(v.path.last(), Some(PathSegment::Index(_))))
             .unwrap_or(false)
     }
 
+    /// Returns true if the selected item exists in the template but not the active config.
     pub fn selected_is_missing(&self) -> bool {
         self.vars.get(self.selected)
             .map(|v| v.status == crate::format::ItemStatus::MissingFromActive)
             .unwrap_or(false)
     }
 
-    /// Saves the current state of variables to the undo tree.
+    /// Saves a snapshot of the current state to the undo history tree.
     pub fn save_undo_state(&mut self) {
         self.undo_tree.push(self.vars.clone(), self.selected);
     }
 
-    /// Reverts to the previous state in the undo tree.
+    /// Reverts the application state to the previous history point.
     pub fn undo(&mut self) {
         if let Some(action) = self.undo_tree.undo() {
             self.vars = action.state.clone();
@@ -571,7 +604,7 @@ impl App {
         }
     }
 
-    /// Advances to the next state in the undo tree.
+    /// Advances the application state to the next history point in the active branch.
     pub fn redo(&mut self) {
         if let Some(action) = self.undo_tree.redo() {
             self.vars = action.state.clone();

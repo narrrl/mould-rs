@@ -2,7 +2,7 @@
 authors = ["Nils Pukropp <nils@narl.io>"]
 edition = "2024"
 name = "mould"
-version = "0.5.0"
+version = "0.5.1"
 
 [[bin]]
 name = "mould"
@@ -17,14 +17,32 @@ java-properties = "2.0.0"
 log = "0.4.29"
 ratatui = "0.30.0"
 rust-ini = "0.21.3"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = { version = "1.0.149", features = ["preserve_order"] }
 serde_yaml = "0.9.34"
 thiserror = "2.0.18"
-toml = { version = "1.0.7", features = ["preserve_order"] }
 tui-input = "0.15.0"
-clap = { version = "4.6.0", features = ["derive"] }
-quick-xml = { version = "0.39.2", features = ["serde", "serialize"] }
+
+[dependencies.serde]
+version = "1.0.228"
+features = ["derive"]
+
+[dependencies.serde_json]
+version = "1.0.149"
+features = ["preserve_order"]
+
+[dependencies.toml]
+version = "1.0.7"
+features = ["preserve_order"]
+
+[dependencies.clap]
+version = "4.6.0"
+features = ["derive"]
+
+[dependencies.quick-xml]
+version = "0.39.2"
+features = [
+    "serde",
+    "serialize",
+]
 
 [dev-dependencies]
 tempfile = "3.27.0"

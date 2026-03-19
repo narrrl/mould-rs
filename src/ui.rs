@@ -1,3 +1,8 @@
+//! Renders the hierarchical Terminal User Interface (TUI).
+//!
+//! This module uses `ratatui` to compose the visual layout of the application, 
+//! providing a navigable tree-view of configuration items.
+
 use crate::app::{App, Mode};
 use crate::config::Config;
 use ratatui::{
@@ -9,11 +14,16 @@ use ratatui::{
 };
 
 /// Renders the main application interface using ratatui.
+///
+/// The interface is composed of:
+/// 1. A hierarchical list of configuration items.
+/// 2. An active input field for editing values/keys.
+/// 3. A status bar showing the current mode and available keybinds.
 pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
     let theme = &config.theme;
     let size = f.area();
 
-    // Render the main background (optional based on transparency config).
+    // Render the main background.
     if !theme.transparent {
         f.render_widget(
             Block::default().style(Style::default().bg(theme.bg_normal())),
@@ -21,7 +31,7 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
         );
     }
 
-    // Horizontal layout with 1-character side margins.
+    // Define outer margins.
     let outer_layout = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
@@ -31,19 +41,19 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
         ])
         .split(size);
 
-    // Vertical layout for the main UI components.
+    // Split the center area vertically.
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(1), // Top margin
-            Constraint::Min(3),    // Main list
-            Constraint::Length(3), // Focused input field
+            Constraint::Min(3),    // Main tree list
+            Constraint::Length(3), // Focused input area
             Constraint::Length(1), // Spacer
             Constraint::Length(1), // Status bar
         ])
         .split(outer_layout[1]);
 
-    // Build the interactive list of configuration variables.
+    // Construct the interactive hierarchical list.
     let matching_indices = app.matching_indices();
     let items: Vec<ListItem> = app
         .vars
@@ -53,11 +63,11 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
             let is_selected = i == app.selected;
             let is_match = matching_indices.contains(&i);
 
-            // Indentation based on depth
+            // Indentation and tree-branch markers.
             let indent = "  ".repeat(var.depth);
             let prefix = if var.is_group { "+ " } else { "  " };
 
-            // Determine colors based on depth
+            // Determine depth-based coloring for the key name.
             let depth_color = if is_selected {
                 theme.bg_normal()
             } else {
@@ -70,7 +80,6 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
                 }
             };
 
-            // Determine colors based on status and selection
             let text_color = if is_selected {
                 theme.fg_highlight()
             } else {
@@ -103,7 +112,7 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
                 Span::styled(&var.key, key_style),
             ];
 
-            // Add status indicator if not present
+            // Add semantic status labels (missing, modified).
             match var.status {
                 crate::format::ItemStatus::MissingFromActive if !var.is_group => {
                     let missing_style = if is_selected {
@@ -138,7 +147,7 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
             if var.is_group {
                 ListItem::new(Line::from(key_spans)).style(item_style)
             } else {
-                // Show live input text for the selected item if in Insert mode.
+                // Determine which value to display (live input vs. stored value).
                 let val = if is_selected && matches!(app.mode, Mode::Insert) {
                     app.input.value()
                 } else {
@@ -156,6 +165,7 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
                     Span::styled(val, value_style),
                 ];
 
+                // Show default value if it differs from current.
                 if let Some(t_val) = &var.template_value
                     && Some(t_val) != var.value.as_ref() {
                         let t_style = if is_selected {
@@ -188,7 +198,7 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
     state.select(Some(app.selected));
     f.render_stateful_widget(list, chunks[1], &mut state);
 
-    // Render the focused input area.
+    // Compose the focused input area details.
     let current_var = app.vars.get(app.selected);
     let mut input_title = " Input ".to_string();
     let mut extra_info = String::new();
@@ -208,13 +218,12 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
 
     let input_border_color = match app.mode {
         Mode::Insert | Mode::InsertKey => theme.border_active(),
-        Mode::Normal | Mode::Search => theme.border_normal(),
+        _ => theme.border_normal(),
     };
 
     let input_text = app.input.value();
     let cursor_pos = app.input.visual_cursor();
 
-    // Show template value in normal mode if it differs
     let display_text = if let Some(var) = current_var {
         if matches!(app.mode, Mode::InsertKey) {
             input_text.to_string()
@@ -238,14 +247,14 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
                 .title(input_title)
                 .title_style(
                     Style::default()
-                        .fg(theme.fg_accent()) // Make title pop
+                        .fg(theme.fg_accent())
                         .add_modifier(Modifier::BOLD),
                 )
                 .border_style(Style::default().fg(input_border_color)),
         );
     f.render_widget(input, chunks[2]);
 
-    // Position the terminal cursor correctly when in Insert mode.
+    // Position terminal cursor during active input.
     if matches!(app.mode, Mode::Insert) || matches!(app.mode, Mode::InsertKey) {
         f.set_cursor_position(ratatui::layout::Position::new(
             chunks[2].x + 1 + cursor_pos as u16,
@@ -253,7 +262,7 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
         ));
     }
 
-    // Render the modern pill-style status bar.
+    // Render the status bar with mode-specific help hints.
     let (mode_str, mode_style) = match app.mode {
         Mode::Normal => (
             " NORMAL ",
@@ -302,7 +311,7 @@ pub fn draw(f: &mut Frame, app: &mut App, config: &Config) {
                 parts.push(format!("{} rename", kb.rename));
                 parts.push(format!("{} toggle", kb.toggle_group));
                 if app.selected_is_missing() {
-                    parts.push(format!("{} add", "a")); // 'a' is currently hardcoded in runner
+                    parts.push(format!("{} add", "a"));
                 }
                 if app.selected_is_array() {
                     parts.push(format!("{}/{} array", kb.append_item, kb.prepend_item));

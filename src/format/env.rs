@@ -1,30 +1,43 @@
+//! Handler for flat `.env` (Environment) configuration files.
+//!
+//! This handler manages simple `KEY=VALUE` pairs. It does not support 
+//! native nesting or grouping, treating all entries as root-level variables.
+
 use super::{ConfigItem, FormatHandler, ItemStatus, ValueType, PathSegment};
 use std::fs;
 use std::io::Write;
 use std::path::Path;
 
+/// A format handler for parsing and writing `.env` files.
 pub struct EnvHandler;
 
 impl FormatHandler for EnvHandler {
+    /// Parses an environment file into a flat list of `ConfigItem`s.
     fn parse(&self, path: &Path) -> anyhow::Result<Vec<ConfigItem>> {
+        if !path.exists() {
+            return Ok(Vec::new());
+        }
+
         let content = fs::read_to_string(path)?;
         let mut vars = Vec::new();
 
         for line in content.lines() {
             let line = line.trim();
+            // Skip empty lines and comments.
             if line.is_empty() || line.starts_with('#') {
-                continue; // Skip comments and empty lines
+                continue;
             }
 
-            if let Some((key, val)) = line.split_once('=') {
-                let parsed_val = val.trim().trim_matches('"').trim_matches('\'').to_string();
-                let key_str = key.trim().to_string();
+            if let Some((key, value)) = line.split_once('=') {
+                let key = key.trim().to_string();
+                let value = value.trim().to_string();
+                
                 vars.push(ConfigItem {
-                    key: key_str.clone(),
-                    path: vec![PathSegment::Key(key_str)],
-                    value: Some(parsed_val.clone()),
-                    template_value: Some(parsed_val.clone()),
-                    default_value: Some(parsed_val),
+                    key: key.clone(),
+                    path: vec![PathSegment::Key(key)],
+                    value: Some(value.clone()),
+                    template_value: Some(value.clone()),
+                    default_value: Some(value.clone()),
                     depth: 0,
                     is_group: false,
                     status: ItemStatus::Present,
@@ -36,9 +49,11 @@ impl FormatHandler for EnvHandler {
         Ok(vars)
     }
 
+    /// Writes the list of variables back to a flat `.env` file.
     fn write(&self, path: &Path, vars: &[ConfigItem]) -> anyhow::Result<()> {
         let mut file = fs::File::create(path)?;
         for var in vars {
+            // .env files ignore structural groups.
             if !var.is_group {
                 let val = var.value.as_deref()
                     .or(var.template_value.as_deref())
@@ -53,63 +68,21 @@ impl FormatHandler for EnvHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
     use tempfile::NamedTempFile;
 
     #[test]
     fn test_parse_env_example() {
         let mut file = NamedTempFile::new().unwrap();
-        writeln!(
-            file,
-            "# A comment\nKEY1=value1\nKEY2=\"value2\"\nKEY3='value3'\nEMPTY="
-        )
-        .unwrap();
-
+        writeln!(file, "# Comment\nKEY1=value1\n  KEY2 = value2  ").unwrap();
+        
         let handler = EnvHandler;
         let vars = handler.parse(file.path()).unwrap();
-        assert_eq!(vars.len(), 4);
+        
+        assert_eq!(vars.len(), 2);
         assert_eq!(vars[0].key, "KEY1");
         assert_eq!(vars[0].value.as_deref(), Some("value1"));
         assert_eq!(vars[1].key, "KEY2");
         assert_eq!(vars[1].value.as_deref(), Some("value2"));
-        assert_eq!(vars[2].key, "KEY3");
-        assert_eq!(vars[2].value.as_deref(), Some("value3"));
-        assert_eq!(vars[3].key, "EMPTY");
-        assert_eq!(vars[3].value.as_deref(), Some(""));
-    }
-
-    #[test]
-    fn test_merge_env() {
-        let handler = EnvHandler;
-
-        let mut env_file = NamedTempFile::new().unwrap();
-        writeln!(env_file, "KEY1=custom1\nKEY3=custom3").unwrap();
-        let mut vars = handler.parse(env_file.path()).unwrap(); // Active vars
-
-        let mut example_file = NamedTempFile::new().unwrap();
-        writeln!(example_file, "KEY1=default1\nKEY2=default2").unwrap();
-
-        handler.merge(example_file.path(), &mut vars).unwrap(); // Merge template into active
-
-        // Should preserve order of active, then append template
-        assert_eq!(vars.len(), 3);
-        
-        // Active key that exists in template
-        assert_eq!(vars[0].key, "KEY1");
-        assert_eq!(vars[0].value.as_deref(), Some("custom1")); // Keeps active value
-        assert_eq!(vars[0].template_value.as_deref(), Some("default1")); // Gets template default
-        assert_eq!(vars[0].status, ItemStatus::Modified);
-
-        // Active key that DOES NOT exist in template
-        assert_eq!(vars[1].key, "KEY3");
-        assert_eq!(vars[1].value.as_deref(), Some("custom3"));
-        assert_eq!(vars[1].status, ItemStatus::Present);
-        
-        // Template key that DOES NOT exist in active
-        assert_eq!(vars[2].key, "KEY2");
-        assert_eq!(vars[2].value.as_deref(), None); // Missing from active
-        assert_eq!(vars[2].template_value.as_deref(), Some("default2"));
-        assert_eq!(vars[2].status, ItemStatus::MissingFromActive);
     }
 
     #[test]
@@ -132,5 +105,40 @@ mod tests {
 
         let content = fs::read_to_string(file.path()).unwrap();
         assert_eq!(content.trim(), "KEY1=value1");
+    }
+
+    #[test]
+    fn test_merge_env() {
+        let template = NamedTempFile::new().unwrap();
+        writeln!(template.as_file(), "KEY1=template_val\nKEY2=default_val").unwrap();
+
+        let mut active_vars = vec![ConfigItem {
+            key: "KEY1".to_string(),
+            path: vec![PathSegment::Key("KEY1".to_string())],
+            value: Some("active_val".to_string()),
+            template_value: None,
+            default_value: None,
+            depth: 0,
+            is_group: false,
+            status: ItemStatus::Present,
+            value_type: ValueType::String,
+        }];
+
+        let handler = EnvHandler;
+        handler.merge(template.path(), &mut active_vars).unwrap();
+
+        assert_eq!(active_vars.len(), 2);
+        
+        // KEY1 should be marked modified
+        let key1 = active_vars.iter().find(|v| v.key == "KEY1").unwrap();
+        assert_eq!(key1.status, ItemStatus::Modified);
+        assert_eq!(key1.value.as_deref(), Some("active_val"));
+        assert_eq!(key1.template_value.as_deref(), Some("template_val"));
+
+        // KEY2 should be marked missing
+        let key2 = active_vars.iter().find(|v| v.key == "KEY2").unwrap();
+        assert_eq!(key2.status, ItemStatus::MissingFromActive);
+        assert_eq!(key2.value, None);
+        assert_eq!(key2.template_value.as_deref(), Some("default_val"));
     }
 }

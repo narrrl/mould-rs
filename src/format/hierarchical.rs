@@ -1,17 +1,29 @@
+//! Provides a generalized handler for hierarchical configuration formats 
+//! (JSON, YAML, TOML, XML).
+//!
+//! This handler works by using `serde_json::Value` as an intermediary 
+//! representation. It "flattens" nested structures into a list of 
+//! `ConfigItem`s for the TUI, and "unflattens" them back into their 
+//! nested form when saving.
+
 use super::{ConfigItem, FormatHandler, FormatType, ItemStatus, ValueType, PathSegment};
 use serde_json::{Map, Value};
 use std::fs;
 use std::path::Path;
 
+/// A format handler capable of processing nested configuration structures.
 pub struct HierarchicalHandler {
+    /// The specific file format this instance is configured to handle.
     format_type: FormatType,
 }
 
 impl HierarchicalHandler {
+    /// Creates a new hierarchical handler for the specified format.
     pub fn new(format_type: FormatType) -> Self {
         Self { format_type }
     }
 
+    /// Reads a file and parses it into an intermediary `serde_json::Value`.
     fn read_value(&self, path: &Path) -> anyhow::Result<Value> {
         let content = fs::read_to_string(path)?;
         let value = match self.format_type {
@@ -24,12 +36,13 @@ impl HierarchicalHandler {
         Ok(value)
     }
 
+    /// Serializes a `serde_json::Value` and writes it to the specified path.
     fn write_value(&self, path: &Path, value: &Value) -> anyhow::Result<()> {
         let content = match self.format_type {
             FormatType::Json => serde_json::to_string_pretty(value)?,
             FormatType::Yaml => serde_yaml::to_string(value)?,
             FormatType::Toml => {
-                // toml requires the root to be a table
+                // TOML requires the root to be a table (Object).
                 if value.is_object() {
                     let toml_value: toml::Value = serde_json::from_value(value.clone())?;
                     toml::to_string_pretty(&toml_value)?
@@ -45,6 +58,10 @@ impl HierarchicalHandler {
     }
 }
 
+/// Converts an XML string into an intermediary `serde_json::Value`.
+/// 
+/// This implementation handles basic element nesting and text content. 
+/// Attributes are currently not supported.
 fn xml_to_json(content: &str) -> anyhow::Result<Value> {
     use quick_xml::reader::Reader;
     use quick_xml::events::Event;
@@ -53,6 +70,7 @@ fn xml_to_json(content: &str) -> anyhow::Result<Value> {
     reader.config_mut().trim_text(true);
     let mut buf = Vec::new();
     
+    /// Recursively parses XML elements into a nested Map structure.
     fn parse_recursive(reader: &mut Reader<&[u8]>) -> anyhow::Result<Value> {
         let mut map = Map::new();
         let mut text = String::new();
@@ -64,6 +82,7 @@ fn xml_to_json(content: &str) -> anyhow::Result<Value> {
                     let name = String::from_utf8_lossy(e.name().as_ref()).to_string();
                     let val = parse_recursive(reader)?;
                     
+                    // If multiple elements have the same name, they are collected into an Array.
                     if let Some(existing) = map.get_mut(&name) {
                         if let Some(arr) = existing.as_array_mut() {
                             arr.push(val);
@@ -93,6 +112,7 @@ fn xml_to_json(content: &str) -> anyhow::Result<Value> {
             }
         } else {
             if !text.is_empty() {
+                // Special key used to store raw text content of an element that also has children.
                 map.insert("$text".to_string(), Value::String(text));
             }
             Ok(Value::Object(map))
@@ -118,12 +138,14 @@ fn xml_to_json(content: &str) -> anyhow::Result<Value> {
     Ok(Value::Object(Map::new()))
 }
 
+/// Converts a nested `serde_json::Value` back into an XML string.
 fn json_to_xml(value: &Value) -> String {
     use quick_xml::Writer;
     use quick_xml::events::{Event, BytesStart, BytesEnd, BytesText};
 
     let mut writer = Writer::new_with_indent(Vec::new(), b' ', 4);
     
+    /// Recursively writes JSON values as XML elements.
     fn write_recursive(writer: &mut Writer<Vec<u8>>, value: &Value, key_name: Option<&str>) {
         if let Some(k) = key_name
             && k == "$text" {
@@ -205,7 +227,6 @@ fn json_to_xml(value: &Value) -> String {
         write_recursive(&mut writer, value, None);
     }
     
-    // Quick-XML adds a trailing newline occasionally, or we might need one
     let mut out = String::from_utf8(writer.into_inner()).unwrap();
     if !out.ends_with('\n') {
         out.push('\n');
@@ -213,6 +234,10 @@ fn json_to_xml(value: &Value) -> String {
     out
 }
 
+/// Recursively flattens a nested `serde_json::Value` into a list of `ConfigItem`s.
+///
+/// This function translates the structural hierarchy of the JSON into 
+/// linear entries with associated paths and depth levels for UI rendering.
 fn flatten(value: &Value, current_path: Vec<PathSegment>, key_name: Option<String>, depth: usize, vars: &mut Vec<ConfigItem>) {
     let mut next_path = current_path.clone();
     
@@ -354,6 +379,9 @@ impl FormatHandler for HierarchicalHandler {
     }
 }
 
+/// Reconstructs a nested `serde_json::Value` from a hierarchical path and a leaf value.
+/// 
+/// This is the core "unflattening" logic used when saving modified configuration.
 fn insert_into_value(root: &mut Value, path: &[PathSegment], new_val_str: &str, value_type: ValueType) {
     if path.is_empty() {
         return;
@@ -361,7 +389,7 @@ fn insert_into_value(root: &mut Value, path: &[PathSegment], new_val_str: &str, 
 
     let mut current = root;
     
-    // Traverse all but the last segment
+    // Traverse all but the last segment to build the intermediate structure.
     for i in 0..path.len() - 1 {
         let segment = &path[i];
         let next_segment = &path[i + 1];
@@ -397,9 +425,10 @@ fn insert_into_value(root: &mut Value, path: &[PathSegment], new_val_str: &str, 
         }
     }
 
-    // Handle the final segment
+    // Insert the actual leaf value at the end of the path.
     let final_segment = &path[path.len() - 1];
     
+    // Attempt to preserve the original data type during insertion.
     let final_val = match value_type {
         ValueType::Number => {
             if let Ok(n) = new_val_str.parse::<i64>() {

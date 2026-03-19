@@ -59,7 +59,7 @@ impl FormatHandler for PropertiesHandler {
             }
         }
 
-        // We don't sort here to preserve the original file order!
+
         Ok(vars)
     }
 
