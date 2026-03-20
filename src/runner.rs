@@ -1,3 +1,8 @@
+//! Orchestrates the main application execution, terminal events, and TUI rendering.
+//!
+//! The `AppRunner` is responsible for the event loop, intercepting raw 
+//! keyboard input, and translating it into high-level application actions.
+
 use crate::app::{App, InsertVariant, Mode};
 use crate::config::Config;
 use crate::format::FormatHandler;
@@ -14,7 +19,7 @@ pub struct AppRunner<'a, B: Backend> {
     terminal: &'a mut Terminal<B>,
     /// Mutable reference to the application state.
     app: &'a mut App,
-    /// Loaded user configuration.
+    /// Loaded user configuration (keybinds, theme).
     config: &'a Config,
     /// Path where the final configuration will be saved.
     output_path: &'a Path,
@@ -22,7 +27,7 @@ pub struct AppRunner<'a, B: Backend> {
     handler: &'a dyn FormatHandler,
     /// Buffer for storing active command entry (e.g., ":w").
     command_buffer: String,
-    /// Buffer for storing sequence of key presses (e.g., "gg").
+    /// Buffer for storing multi-key sequence of presses (e.g., "gg").
     key_sequence: String,
 }
 
@@ -30,7 +35,7 @@ impl<'a, B: Backend> AppRunner<'a, B>
 where
     io::Error: From<B::Error>,
 {
-    /// Creates a new runner instance.
+    /// Creates a new runner instance with all required dependencies.
     pub fn new(
         terminal: &'a mut Terminal<B>,
         app: &'a mut App,
@@ -50,6 +55,9 @@ where
     }
 
     /// Starts the main application loop.
+    /// 
+    /// This loop continues until `self.app.running` is set to false. 
+    /// Each iteration draws the UI and waits for a keyboard event.
     pub fn run(&mut self) -> io::Result<()> {
         while self.app.running {
             self.terminal
@@ -63,6 +71,9 @@ where
     }
 
     /// Primary dispatcher for all keyboard events.
+    ///
+    /// It delegates handling to specialized methods based on the 
+    /// current application mode.
     fn handle_key_event(&mut self, key: KeyEvent) -> io::Result<()> {
         match self.app.mode {
             Mode::Normal => self.handle_normal_mode(key),
@@ -108,7 +119,11 @@ where
         }
     }
 
-    /// Handles primary navigation (j/k) and transitions to insert or command modes.
+    /// Handles primary navigation and transitions to insert or command modes.
+    ///
+    /// This method manages multi-key sequences (like `gg`) and immediate 
+    /// actions (like `i`). It correctly re-evaluates sequences to prevent 
+    /// "one-key-behind" responsiveness bugs.
     fn handle_navigation_mode(&mut self, key: KeyEvent) -> io::Result<()> {
         let key_str = if let KeyCode::Char(c) = key.code {
             let mut s = String::new();
@@ -124,61 +139,20 @@ where
         if !key_str.is_empty() {
             self.key_sequence.push_str(&key_str);
 
-            let mut exact_match = None;
-            let mut prefix_match = false;
-
-            // Collect all configured keybinds
-            let binds = [
-                (&self.config.keybinds.down, "down"),
-                (&self.config.keybinds.up, "up"),
-                (&self.config.keybinds.edit, "edit"),
-                (&self.config.keybinds.edit_append, "edit_append"),
-                (&self.config.keybinds.edit_substitute, "edit_substitute"),
-                (&"S".to_string(), "edit_substitute"),
-                (&self.config.keybinds.search, "search"),
-                (&self.config.keybinds.next_match, "next_match"),
-                (&self.config.keybinds.previous_match, "previous_match"),
-                (&self.config.keybinds.jump_top, "jump_top"),
-                (&self.config.keybinds.jump_bottom, "jump_bottom"),
-                (&self.config.keybinds.append_item, "append_item"),
-                (&self.config.keybinds.prepend_item, "prepend_item"),
-                (&self.config.keybinds.delete_item, "delete_item"),
-                (&self.config.keybinds.undo, "undo"),
-                (&self.config.keybinds.redo, "redo"),
-                (&self.config.keybinds.rename, "rename"),
-                (&self.config.keybinds.append_group, "append_group"),
-                (&self.config.keybinds.prepend_group, "prepend_group"),
-                (&self.config.keybinds.toggle_group, "toggle_group"),
-                (&"a".to_string(), "add_missing"),
-                (&":".to_string(), "command"),
-                (&"q".to_string(), "quit"),
-            ];
-
-            for (bind, action) in binds.iter() {
-                if bind == &&self.key_sequence {
-                    exact_match = Some(*action);
-                    break;
-                } else if bind.starts_with(&self.key_sequence) {
-                    prefix_match = true;
+            let mut match_result = self.find_binding();
+            if match_result.is_none() {
+                if self.is_prefix_binding() {
+                    // It's a prefix for a multi-key bind (like first 'g' in 'gg'), wait for more.
+                    return Ok(());
+                } else {
+                    // Not a match and not a prefix, restart the buffer with the current key.
+                    self.key_sequence.clear();
+                    self.key_sequence.push_str(&key_str);
+                    match_result = self.find_binding();
                 }
             }
 
-            if exact_match.is_none() && !prefix_match {
-                // Not a match and not a prefix, restart with current key
-                self.key_sequence.clear();
-                self.key_sequence.push_str(&key_str);
-                
-                for (bind, action) in binds.iter() {
-                    if bind == &&self.key_sequence {
-                        exact_match = Some(*action);
-                        break;
-                    } else if bind.starts_with(&self.key_sequence) {
-                        prefix_match = true;
-                    }
-                }
-            }
-
-            if let Some(action) = exact_match {
+            if let Some(action) = match_result {
                 self.key_sequence.clear();
                 match action {
                     "down" => self.app.next(),
@@ -217,11 +191,9 @@ where
                     "quit" => self.app.running = false,
                     _ => {}
                 }
-            } else if !prefix_match {
-                self.key_sequence.clear();
             }
         } else {
-            // Non-character keys reset the sequence buffer
+            // Reset the sequence buffer if a non-character key (like Arrow Keys) is pressed.
             self.key_sequence.clear();
             match key.code {
                 KeyCode::Down => self.app.next(),
@@ -232,6 +204,74 @@ where
             }
         }
         Ok(())
+    }
+
+    /// Looks up the current `key_sequence` in the configured keybindings.
+    fn find_binding(&self) -> Option<&'static str> {
+        let binds = [
+            (&self.config.keybinds.down, "down"),
+            (&self.config.keybinds.up, "up"),
+            (&self.config.keybinds.edit, "edit"),
+            (&self.config.keybinds.edit_append, "edit_append"),
+            (&self.config.keybinds.edit_substitute, "edit_substitute"),
+            (&"S".to_string(), "edit_substitute"), // Semantic alias for Vim compatibility.
+            (&self.config.keybinds.search, "search"),
+            (&self.config.keybinds.next_match, "next_match"),
+            (&self.config.keybinds.previous_match, "previous_match"),
+            (&self.config.keybinds.jump_top, "jump_top"),
+            (&self.config.keybinds.jump_bottom, "jump_bottom"),
+            (&self.config.keybinds.append_item, "append_item"),
+            (&self.config.keybinds.prepend_item, "prepend_item"),
+            (&self.config.keybinds.delete_item, "delete_item"),
+            (&self.config.keybinds.undo, "undo"),
+            (&self.config.keybinds.redo, "redo"),
+            (&self.config.keybinds.rename, "rename"),
+            (&self.config.keybinds.append_group, "append_group"),
+            (&self.config.keybinds.prepend_group, "prepend_group"),
+            (&self.config.keybinds.toggle_group, "toggle_group"),
+            (&"a".to_string(), "add_missing"),
+            (&":".to_string(), "command"),
+            (&"q".to_string(), "quit"),
+        ];
+
+        for (bind, action) in binds.iter() {
+            if bind == &&self.key_sequence {
+                return Some(*action);
+            }
+        }
+        None
+    }
+
+    /// Returns true if the current `key_sequence` is a partial prefix of any configured bind.
+    fn is_prefix_binding(&self) -> bool {
+        let binds = [
+            &self.config.keybinds.down,
+            &self.config.keybinds.up,
+            &self.config.keybinds.edit,
+            &self.config.keybinds.edit_append,
+            &self.config.keybinds.edit_substitute,
+            &self.config.keybinds.search,
+            &self.config.keybinds.next_match,
+            &self.config.keybinds.previous_match,
+            &self.config.keybinds.jump_top,
+            &self.config.keybinds.jump_bottom,
+            &self.config.keybinds.append_item,
+            &self.config.keybinds.prepend_item,
+            &self.config.keybinds.delete_item,
+            &self.config.keybinds.undo,
+            &self.config.keybinds.redo,
+            &self.config.keybinds.rename,
+            &self.config.keybinds.append_group,
+            &self.config.keybinds.prepend_group,
+            &self.config.keybinds.toggle_group,
+        ];
+
+        for bind in binds.iter() {
+            if bind.starts_with(&self.key_sequence) && bind.as_str() != self.key_sequence {
+                return true;
+            }
+        }
+        false
     }
 
     /// Adds a missing item from the template to the active configuration.
@@ -247,7 +287,7 @@ where
             }
     }
 
-    /// Delegates key events to the `tui_input` handler during active editing.
+    /// Delegates key events to the `tui_input` handler during active value editing.
     fn handle_insert_mode(&mut self, key: KeyEvent) -> io::Result<()> {
         match key.code {
             KeyCode::Esc => {
@@ -263,7 +303,7 @@ where
         Ok(())
     }
 
-    /// Handles keys in InsertKey mode.
+    /// Delegates key events to the `tui_input` handler during active key renaming.
     fn handle_insert_key_mode(&mut self, key: KeyEvent) -> io::Result<()> {
         match key.code {
             KeyCode::Esc => {
@@ -279,7 +319,7 @@ where
         Ok(())
     }
 
-    /// Handles search mode key events.
+    /// Handles search mode key events and live-updates search filtering.
     fn handle_search_mode(&mut self, key: KeyEvent) -> io::Result<()> {
         match key.code {
             KeyCode::Enter | KeyCode::Esc => {

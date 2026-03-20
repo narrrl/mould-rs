@@ -1,26 +1,44 @@
 use crate::format::ConfigItem;
 use std::collections::HashMap;
 
+/// Represents a single snapshot of the application state for undo/redo purposes.
 pub struct EditAction {
+    /// The complete list of configuration items at the time of the action.
     pub state: Vec<ConfigItem>,
+    /// The index of the item that was selected during this action.
     pub selected: usize,
 }
 
+/// A node in the undo tree, representing a point in the application's history.
 pub struct UndoNode {
+    /// The state data captured at this history point.
     pub action: EditAction,
+    /// ID of the parent node (previous state). Root node has None.
     pub parent: Option<usize>,
+    /// IDs of all states that branched off from this one.
     pub children: Vec<usize>,
 }
 
+/// A non-linear undo/redo system that tracks history as a branching tree.
+///
+/// Unlike a simple stack, an UndoTree allows users to undo several steps, 
+/// make a new change (creating a branch), and still navigate through 
+/// the most recent history path.
 pub struct UndoTree {
+    /// Map of node IDs to their respective history nodes.
     nodes: HashMap<usize, UndoNode>,
+    /// The ID of the node representing the current application state.
     current_node: usize,
+    /// Counter for assigning unique IDs to new nodes.
     next_id: usize,
-    // Track the latest child added to a node to know which branch to follow on redo
+    /// Tracks the most recently active branch for each node.
+    /// This allows the 'redo' operation to follow the path the user 
+    /// actually took when multiple branches exist.
     latest_branch: HashMap<usize, usize>,
 }
 
 impl UndoTree {
+    /// Creates a new undo tree initialized with the starting application state.
     pub fn new(initial_state: Vec<ConfigItem>, initial_selected: usize) -> Self {
         let root_id = 0;
         let root_node = UndoNode {
@@ -43,6 +61,10 @@ impl UndoTree {
         }
     }
 
+    /// Pushes a new state onto the tree, branching off from the current node.
+    ///
+    /// This creates a new child node for the current position and updates
+    /// the branch tracking to ensure this new path is preferred during redo.
     pub fn push(&mut self, state: Vec<ConfigItem>, selected: usize) {
         let new_id = self.next_id;
         self.next_id += 1;
@@ -68,6 +90,8 @@ impl UndoTree {
         self.current_node = new_id;
     }
 
+    /// Moves the current pointer back to the parent node and returns the previous state.
+    /// Returns None if the current node is the root (no more history to undo).
     pub fn undo(&mut self) -> Option<&EditAction> {
         if let Some(current) = self.nodes.get(&self.current_node)
             && let Some(parent_id) = current.parent {
@@ -77,6 +101,11 @@ impl UndoTree {
         None
     }
 
+    /// Moves the current pointer forward to the latest child branch and returns the state.
+    ///
+    /// Redo follows the `latest_branch` map to decide which path to take 
+    /// if multiple branches exist. If no branch is recorded, it defaults to the 
+    /// most recently created child.
     pub fn redo(&mut self) -> Option<&EditAction> {
         if let Some(next_id) = self.latest_branch.get(&self.current_node).copied() {
             self.current_node = next_id;
